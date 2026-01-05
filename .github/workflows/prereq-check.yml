@@ -1,0 +1,24 @@
+name: Prerequisite Check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  prereq-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Check prerequisites (Node/Python/pip)
+        run: |
+          node ui/electron/scripts/check_prereqs.js
+          python --version
+          pip --version

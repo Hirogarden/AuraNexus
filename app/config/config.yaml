@@ -1,0 +1,27 @@
+services:
+  koboldcpp:
+    port: 5001
+    # Override 'cmd' to point to your koboldcpp launcher or executable
+    cmd: ["python", "koboldcpp.py", "--port", "5001"]
+    cwd: engines/koboldcpp
+
+  sillytavern:
+    port: 3000
+    cmd: ["node", "server.js"]
+    cwd: frontends/sillytavern
+
+  anythingllm:
+    port: 8000
+    cmd: ["node", "server.js"]
+    cwd: data-manager/anything-llm
+
+  piper:
+    port: 59125
+    # example piper serve command; replace with actual piper server command if different
+    cmd: ["python", "tts/piper/piper_serve.py", "--host", "127.0.0.1", "--port", "59125"]
+    cwd: tts/piper
+
+  aura_api:
+    port: 8080
+    cmd: ["uvicorn", "aura_api.app:app", "--host", "127.0.0.1", "--port", "8080"]
+    cwd: app

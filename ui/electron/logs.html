@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>AuraNexus Logs</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 16px; }
+      #files { width: 250px; float: left; margin-right: 16px; }
+      #viewer { white-space: pre-wrap; font-family: monospace; border: 1px solid #ddd; padding: 8px; height: 600px; overflow: auto; }
+      button { margin-right: 8px; }
+    </style>
+  </head>
+  <body>
+    <h2>AuraNexus Log Viewer</h2>
+    <div>
+      <button id="refreshFiles">Refresh Files</button>
+      <label>Lines: <input id="lines" type="number" value="200" style="width:80px" /></label>
+      <label><input id="autorefresh" type="checkbox" /> Auto-refresh (5s)</label>
+    </div>
+    <div style="margin-top:12px">
+      <div id="files"></div>
+      <div id="viewer">Select a log file on the left.</div>
+    </div>
+    <script src="logs.js"></script>
+  </body>
+</html>
