@@ -1,0 +1,2 @@
+# Optional heavy builds (native compilation required)
+llama-cpp-python>=0.1.92

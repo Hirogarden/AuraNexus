@@ -1,0 +1,16 @@
+# Frontend UI
+PySide6>=6.6.0
+
+# Backend APIs
+fastapi>=0.100.0
+uvicorn>=0.22.0
+httpx
+requests>=2.31.0
+
+# Configuration & Data
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+PyYAML>=5.1
+
+# LLM - Pre-built wheels (local LLM fallback if Ollama unavailable)
+llama-cpp-python[server]>=0.3.0
