@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""AuraNexus service manager (simple MVP).
+"""AuraNexus service manager."""
 
 Usage:
   python aura_launcher.py start-all

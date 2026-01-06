@@ -1,10 +1,27 @@
-"""AuraNexus - Unified Entry Point
-Provides a launcher to select between:
-- Project A: Basic Assistant (Local LLM)
-- Project B: Interactive Storyteller (SillyTavern integration)
-- Project C: Full Companion (All features)
+"""AuraNexus - OLD/DEPRECATED Launcher
+THIS FILE IS DEPRECATED. Use aura_nexus_app.py instead.
+
+This is an old project launcher from the previous program version.
+Keeping for reference only - helpful code will be harvested later.
+
+To run the current application, use:
+    python aura_nexus_app.py
+    OR
+    run_aura_nexus.ps1
 """
 
+import sys
+print("=" * 60, file=sys.stderr)
+print("DEPRECATED: This launcher is from the old program", file=sys.stderr)
+print("Please use: python aura_nexus_app.py", file=sys.stderr)
+print("=" * 60, file=sys.stderr)
+sys.exit(1)
+
+# ============================================================================
+# OLD CODE BELOW - PRESERVED FOR REFERENCE ONLY
+# ============================================================================
+
+"""
 import sys
 from pathlib import Path
 
@@ -15,9 +32,9 @@ from PySide6.QtGui import QFont, QIcon, QPixmap
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from llm.model_manager import ModelManager
-from llm.conversation import ConversationManager
-from ui.chat_window import ChatWindow
+# Import Ollama-based chat window
+from ollama_chat import OllamaChatWindow
+"""
 
 
 class ProjectLauncher(QMainWindow):
@@ -83,55 +100,45 @@ class ProjectLauncher(QMainWindow):
         layout.addStretch()
     
     def launch_project_a(self):
-        """Launch Project A (Basic Assistant with local LLM)."""
+        """Launch Project A (Basic Assistant with Ollama)."""
         print("Launching Project A: Basic Assistant...")
         
-        # Create conversation and model managers
-        conversation_manager = ConversationManager()
-        print("✓ Conversation manager initialized")
+        system_prompt = (
+            "You are Aura, a friendly and helpful AI assistant. "
+            "Provide clear, concise answers and be supportive."
+        )
         
-        # Create and load LLM model
-        llm_manager = ModelManager()
-        print(f"Loading model from: {llm_manager.model_path}")
-        
-        if not llm_manager.load_model():
-            QMessageBox.critical(
-                self,
-                "Model Loading Error",
-                f"Failed to load the AI model.\n\n"
-                f"Expected location: {llm_manager.model_path}\n\n"
-                f"Please ensure Mistral 7B GGUF model is in the models/ directory.\n"
-                f"Download from: https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF"
-            )
-            return
-        
-        print("✓ Model loaded successfully")
-        
-        # Create and show chat window
-        self.chat_window = ChatWindow(llm_manager, conversation_manager)
-        self.chat_window.setWindowTitle("AuraNexus - Project A: Basic Assistant")
+        self.chat_window = OllamaChatWindow("Project A: Basic Assistant", system_prompt)
         self.chat_window.show()
         self.close()
     
     def launch_project_b(self):
-        """Launch Project B (Interactive Storyteller with SillyTavern)."""
-        QMessageBox.information(
-            self,
-            "Project B",
-            "Interactive Storyteller mode.\n\n"
-            "This will integrate with SillyTavern for character interactions.\n"
-            "Feature coming soon!"
+        """Launch Project B (Interactive Storyteller with character interactions)."""
+        print("Launching Project B: Interactive Storyteller...")
+        
+        system_prompt = (
+            "You are a creative storytelling assistant. "
+            "Help create engaging stories, roleplay scenarios, and character interactions. "
+            "Be imaginative, expressive, and maintain consistent character personalities."
         )
+        
+        self.chat_window = OllamaChatWindow("Project B: Interactive Storyteller", system_prompt)
+        self.chat_window.show()
+        self.close()
     
     def launch_project_c(self):
         """Launch Project C (Full Companion with all features)."""
-        QMessageBox.information(
-            self,
-            "Project C",
-            "Full Companion mode.\n\n"
-            "This includes avatar integration, image generation, and all features.\n"
-            "Feature coming soon!"
+        print("Launching Project C: Full Companion...")
+        
+        system_prompt = (
+            "You are Aura, a comprehensive AI companion. "
+            "Provide helpful assistance across all domains: conversation, creative writing, "
+            "technical help, emotional support, and more. Be warm, intelligent, and adaptive."
         )
+        
+        self.chat_window = OllamaChatWindow("Project C: Full Companion", system_prompt)
+        self.chat_window.show()
+        self.close()
 
 
 def main():

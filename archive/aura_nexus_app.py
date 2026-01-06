@@ -1,10 +1,44 @@
+"""DEPRECATED: Full-featured Aura Nexus App (OLD VERSION)
+
+⚠️  THIS FILE IS DEPRECATED - DO NOT USE AS MAIN LAUNCHER ⚠️
+
+This was the complex full-featured app from the previous program version.
+It has been replaced with the simpler chat_launcher.py / src/ollama_chat.py.
+
+PRESERVED FOR CODE HARVESTING ONLY
+Useful features to extract:
+- Avatar integration (VSeeFace, Animaze, VTS)
+- Service management tab
+- AnythingLLM integration
+- Model management UI
+- Settings persistence
+- Upgraded AsyncOllamaClient health checks
+
+To use the CURRENT app, run:
+    python chat_launcher.py
+    OR
+    run_aura_nexus.ps1
+"""
+
 import sys
 import threading
 import time
 from dataclasses import dataclass
 from typing import List, Dict, Optional
+import asyncio
+from pathlib import Path
 
-import requests
+# Add src to path for ollama_client import
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+try:
+    from ollama_client import AsyncOllamaClient, Message as OllamaMessage, ResponseError
+except ImportError:
+    # Fallback if imports fail
+    AsyncOllamaClient = None
+    OllamaMessage = None
+    ResponseError = None
+
 from PySide6.QtCore import Qt, QTimer, QObject, Signal, Slot
 from PySide6.QtGui import QKeySequence, QShortcut, QIcon, QPixmap
 from PySide6.QtWidgets import (
@@ -34,166 +68,59 @@ from PySide6.QtWidgets import (
 )
 
 
+# Message dataclass now imported from ollama_client
+# OllamaClient class replaced with AsyncOllamaClient import
+# Legacy sync wrapper for backward compatibility
+class OllamaClient:
+    """Synchronous wrapper around AsyncOllamaClient for backward compatibility."""
+    def __init__(self, base_url: str = "http://localhost:11434", model: str = "llama3") -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self._async_client = None
+        if AsyncOllamaClient:
+            self._async_client = AsyncOllamaClient(host=base_url, model=model)
+    
+    def chat(self, messages: List, system_prompt: Optional[str] = None, options: Optional[Dict] = None, model: Optional[str] = None) -> str:
+        """Synchronous chat method - runs async client in sync context."""
+        if not self._async_client:
+            return "[Error: AsyncOllamaClient not available]"
+        
+        # Convert Message objects if needed
+        if AsyncOllamaClient and OllamaMessage:
+            conv_msgs = []
+            for m in messages:
+                if hasattr(m, 'role') and hasattr(m, 'content'):
+                    conv_msgs.append(OllamaMessage(role=m.role, content=m.content))
+                else:
+                    conv_msgs.append(m)
+            
+            # Run async method in sync context
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    response = loop.run_until_complete(
+                        self._async_client.chat(
+                            messages=conv_msgs,
+                            model=model or self.model,
+                            options=options
+                        )
+                    )
+                    return response.get('message', {}).get('content', '')
+                finally:
+                    loop.close()
+            except Exception as e:
+                if ResponseError and isinstance(e, ResponseError):
+                    return f"[Ollama error: {e.error} (HTTP {e.status_code})]"
+                return f"[Error contacting Ollama: {e}]"
+        return "[Error: Required imports not available]"
+
+
+# Message dataclass for backward compatibility
 @dataclass
 class Message:
     role: str
     content: str
-
-
-class OllamaClient:
-    def __init__(self, base_url: str = "http://localhost:11434", model: str = "llama3") -> None:
-        self.base_url = base_url.rstrip("/")
-        
-        self.model = model
-
-    def chat(self, messages: List[Message], system_prompt: Optional[str] = None, options: Optional[Dict] = None, model: Optional[str] = None) -> str:
-        url = f"{self.base_url}/api/chat"
-        msg_list = [{"role": m.role, "content": m.content} for m in messages]
-        if system_prompt:
-            # Redundantly include the system prompt both as a top-level field
-            # and as the first message to ensure models honor it.
-            msg_list = [{"role": "system", "content": system_prompt}] + msg_list
-        payload: Dict = {
-            "model": (model or self.model),
-            "stream": False,
-            "messages": msg_list,
-        }
-        if system_prompt:
-            payload["system"] = system_prompt
-        if options and isinstance(options, dict):
-            payload["options"] = options
-        try:
-            tries = 2
-            resp = None
-            for attempt in range(tries):
-                try:
-                    resp = requests.post(url, json=payload, timeout=300)
-                    resp.raise_for_status()
-                    break
-                except requests.exceptions.RequestException as e:
-                    if attempt < (tries - 1):
-                        import time as _t
-                        _t.sleep(0.2)
-                        continue
-                    raise
-            # Successful response; try to log concise info for debugging.
-            try:
-                import os, json
-                from datetime import datetime
-                log_dir = os.path.join(os.path.dirname(__file__), "logs")
-                os.makedirs(log_dir, exist_ok=True)
-                log_file = os.path.join(log_dir, "ollama_requests.log")
-                with open(log_file, "a", encoding="utf-8") as f:
-                    f.write(f"[{datetime.now().isoformat()}] REQUEST model={payload.get('model')} messages={len(payload.get('messages',[]))} system_len={len(payload.get('system') or '')}\n")
-                    try:
-                        rtext = resp.text
-                        # write at most 2000 characters
-                        f.write(f"[{datetime.now().isoformat()}] RESPONSE status={resp.status_code} body={rtext[:2000]}\n")
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            data = resp.json()
-            msg = data.get("message", {})
-            return msg.get("content", "")
-        except requests.exceptions.HTTPError as e:
-            code = None
-            try:
-                code = e.response.status_code
-            except Exception:
-                code = None
-            if code == 404:
-                return f"[Ollama model not found: {model or self.model}]"
-            # Attempt to capture server error body
-            try:
-                body = e.response.text
-            except Exception:
-                body = None
-            # If we got a server-side runner crash, try one safe fallback model once
-            try:
-                import os, json
-                from datetime import datetime
-                log_dir = os.path.join(os.path.dirname(__file__), "logs")
-                os.makedirs(log_dir, exist_ok=True)
-                log_file = os.path.join(log_dir, "ollama_requests.log")
-                with open(log_file, "a", encoding="utf-8") as f:
-                    f.write(f"[{datetime.now().isoformat()}] HTTP ERROR model={model or self.model} code={code} body={(body or '')[:2000]}\n")
-            except Exception:
-                pass
-
-            # Try a single automated fallback if the runner unexpectedly stopped or health check failed
-            try:
-                if code == 500 and body and ("model runner has unexpectedly stopped" in body or "health resp" in body or "connectex" in body):
-                    try:
-                        # Query available models and pick a different one (prefer smaller)
-                        tags_url = f"{self.base_url}/api/tags"
-                        r = requests.get(tags_url, timeout=3)
-                        if r.status_code < 400:
-                            data = r.json()
-                            raw = data.get("models") or data.get("tags") or []
-                            candidates = []
-                            for m in raw:
-                                name = (m.get("name") if isinstance(m, dict) else None) or (m.get("model") if isinstance(m, dict) else None) or (str(m) if not isinstance(m, dict) else None)
-                                if name:
-                                    candidates.append(name)
-                            # pick first candidate different from the current
-                            current_base = str((model or self.model) or "").split(":")[0]
-                            fallback = None
-                            for c in candidates:
-                                if str(c).split(":")[0] != current_base:
-                                    fallback = c
-                                    break
-                            if fallback:
-                                # log and attempt one retry with fallback
-                                try:
-                                    with open(log_file, "a", encoding="utf-8") as f:
-                                        f.write(f"[{datetime.now().isoformat()}] Attempting fallback model={fallback}\n")
-                                except Exception:
-                                    pass
-                                payload["model"] = fallback
-                                r2 = requests.post(f"{self.base_url}/api/chat", json=payload, timeout=300)
-                                try:
-                                    r2.raise_for_status()
-                                    data = r2.json()
-                                    msg = data.get("message", {})
-                                    return msg.get("content", "")
-                                except Exception:
-                                    # if fallback fails, continue to surface original error
-                                    pass
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
-            return f"[Ollama HTTP error: {code}. See logs/ollama_requests.log for details]"
-        except requests.exceptions.RequestException as e:
-            # network-related error
-            try:
-                import os
-                from datetime import datetime
-                log_dir = os.path.join(os.path.dirname(__file__), "logs")
-                os.makedirs(log_dir, exist_ok=True)
-                log_file = os.path.join(log_dir, "ollama_requests.log")
-                with open(log_file, "a", encoding="utf-8") as f:
-                    f.write(f"[{datetime.now().isoformat()}] NETWORK ERROR model={model or self.model} err={e}\n")
-            except Exception:
-                pass
-            return f"[Error contacting Ollama (model={model or self.model}): {e}. See logs/ollama_requests.log]"
-        except ValueError as e:
-            # invalid json
-            try:
-                import os
-                from datetime import datetime
-                log_dir = os.path.join(os.path.dirname(__file__), "logs")
-                os.makedirs(log_dir, exist_ok=True)
-                log_file = os.path.join(log_dir, "ollama_requests.log")
-                with open(log_file, "a", encoding="utf-8") as f:
-                    f.write(f"[{datetime.now().isoformat()}] JSON ERROR model={model or self.model} err={e}\n")
-            except Exception:
-                pass
-            return f"[Error contacting Ollama (invalid JSON) (model={model or self.model}): {e}. See logs/ollama_requests.log]"
-        except Exception as e:
-            return f"[Error contacting Ollama (model={model or self.model}): {e}]"
 
 
 class LlamaCppClient:
@@ -2116,6 +2043,7 @@ class AuraNexusWindow(QMainWindow):
             pass
 
     def _probe_anyllm(self) -> None:
+        """Check AnythingLLM health status."""
         if not self.anyllm_enable.isChecked():
             return
         base = self.anyllm_base.text().strip().rstrip("/")
@@ -2124,16 +2052,32 @@ class AuraNexusWindow(QMainWindow):
         url_candidates = [f"{base}/api/docs", f"{base}/api/v1/health", f"{base}/api/health"]
         status = "Offline"
         color = "#a00"
-        import requests
-        for u in url_candidates:
-            try:
-                r = requests.get(u, timeout=2)
-                if r.status_code < 400:
-                    status = "Online"
-                    color = "#0a0"
-                    break
-            except Exception:
-                continue
+        
+        # Use httpx if available (from AsyncOllamaClient dependencies), otherwise fallback
+        try:
+            import httpx
+            for u in url_candidates:
+                try:
+                    resp = httpx.get(u, timeout=2.0)
+                    if resp.status_code < 400:
+                        status = "Online"
+                        color = "#0a0"
+                        break
+                except Exception:
+                    continue
+        except ImportError:
+            # Fallback to requests
+            import requests
+            for u in url_candidates:
+                try:
+                    r = requests.get(u, timeout=2)
+                    if r.status_code < 400:
+                        status = "Online"
+                        color = "#0a0"
+                        break
+                except Exception:
+                    continue
+        
         if hasattr(self, "anyllm_status"):
             try:
                 self.anyllm_status.setText(status)
@@ -2142,46 +2086,69 @@ class AuraNexusWindow(QMainWindow):
                 pass
 
     def _update_llm_health_async(self) -> None:
+        """Check Ollama health using AsyncOllamaClient."""
         import time as _t
         now = _t.time()
         if getattr(self, "_last_llm_health_ts", 0) and (now - self._last_llm_health_ts) < 0.4:
             return
         self._last_llm_health_ts = now
+        
         def work():
-            import requests
             status = "Offline"
             color = "#a00"
             detail = ""
-            try:
-                r = requests.get("http://localhost:11434/api/tags", timeout=2)
-                if r.status_code < 400:
-                    status = "No model"
-                    color = "#d88"
-                    data = r.json()
-                    raw = data.get("models") or data.get("tags") or []
-                    names = []
-                    for m in raw:
-                        name = (
-                            (m.get("model") if isinstance(m, dict) else None)
-                            or (m.get("name") if isinstance(m, dict) else None)
-                            or (str(m) if not isinstance(m, dict) else None)
-                        )
-                        if not name:
-                            continue
-                        names.append(str(name).split(":")[0])
-                    cur = self.model_combo.currentText().strip() or "llama3"
-                    if names:
-                        if cur in names:
-                            status = "Ready"
-                            color = "#0a0"
-                        detail = f"Current: {cur} | Available: {', '.join(sorted(set(names)))}"
-            except Exception:
-                status = "Offline"
-                color = "#a00"
+            version = ""
+            
+            # Use upgraded AsyncOllamaClient for health check
+            if AsyncOllamaClient:
                 try:
-                    self.services_console.append("Failed to contact Ollama for health check")
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        async def check():
+                            async with AsyncOllamaClient() as client:
+                                # Fast health check
+                                healthy = await client.health_check()
+                                if not healthy:
+                                    return "Offline", "#a00", "", ""
+                                
+                                # Get version
+                                ver = await client.get_version()
+                                
+                                # List models
+                                models = await client.list_models()
+                                names = [m.split(':')[0] for m in models]
+                                
+                                cur = self.model_combo.currentText().strip() or "llama3"
+                                if names:
+                                    if cur in names or cur in models:
+                                        return "Ready", "#0a0", f"Ollama {ver} | Current: {cur} | Available: {', '.join(sorted(set(names)))}", ver
+                                    else:
+                                        return "No model", "#d88", f"Ollama {ver} | Current: {cur} (not found) | Available: {', '.join(sorted(set(names)))}", ver
+                                return "No models", "#d88", f"Ollama {ver} | No models installed", ver
+                        
+                        status, color, detail, version = loop.run_until_complete(check())
+                    finally:
+                        loop.close()
+                except Exception as e:
+                    status = "Offline"
+                    color = "#a00"
+                    detail = f"Error: {e}"
+                    try:
+                        self.services_console.append(f"Ollama health check failed: {e}")
+                    except Exception:
+                        pass
+            else:
+                # Fallback to basic check if imports failed
+                try:
+                    import requests
+                    r = requests.get("http://localhost:11434/api/tags", timeout=2)
+                    if r.status_code < 400:
+                        status = "Ready (legacy)"
+                        color = "#0a0"
                 except Exception:
                     pass
+            
             def ui_update():
                 prior_status = getattr(self, "_last_llm_health_status", None)
                 prior_detail = getattr(self, "_last_llm_health_detail", None)
@@ -2189,6 +2156,7 @@ class AuraNexusWindow(QMainWindow):
                 self.llm_health.setStyleSheet(f"color: {color}; font-weight: bold")
                 if detail:
                     self.llm_health.setToolTip(detail)
+                
                 # If using a local GGUF model, prioritize its health status
                 try:
                     if getattr(self, 'local_model_chk', None) and self.local_model_chk.isChecked():
@@ -2201,18 +2169,26 @@ class AuraNexusWindow(QMainWindow):
                             self.llm_health.setStyleSheet(f"color: #d88; font-weight: bold")
                 except Exception:
                     pass
+                
                 # Services tab Ollama mirror
                 if hasattr(self, 'ollama_status'):
-                    self.ollama_status.setText(status)
+                    ollama_txt = f"{status}"
+                    if version:
+                        ollama_txt = f"{status} (v{version})"
+                    self.ollama_status.setText(ollama_txt)
                     self.ollama_status.setStyleSheet(f"color: {color}; font-weight: bold")
+                
                 if (status != prior_status) or (detail and detail != prior_detail):
                     if detail:
                         self.chat_view.append(f"<i>LLM Health:</i> {detail}")
                         if hasattr(self, 'services_console'):
                             self.services_console.append(f"LLM: {status} | {detail}")
+                
                 self._last_llm_health_status = status
                 self._last_llm_health_detail = detail
+            
             self._ui_call(ui_update)
+        
         threading.Thread(target=work, daemon=True).start()
 
 def main() -> int:

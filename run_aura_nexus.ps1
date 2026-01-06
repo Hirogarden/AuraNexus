@@ -4,7 +4,7 @@
 $ErrorActionPreference = "Stop"
 $venvActivate = Join-Path $PSScriptRoot ".venv\Scripts\Activate.ps1"
 $venvPython   = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
-$appFile      = Join-Path $PSScriptRoot "aura_nexus_app.py"
+$appFile      = Join-Path $PSScriptRoot "chat_launcher.py"
 
 if (-not (Test-Path $venvActivate)) {
   Write-Host "[Aura Nexus] Creating virtual environment..." -ForegroundColor Cyan
@@ -15,6 +15,7 @@ if (-not (Test-Path $venvActivate)) {
 
 if (-not (Test-Path $appFile)) {
   Write-Host "Main file not found: $appFile" -ForegroundColor Red
+  Write-Host "Looking for chat_launcher.py..." -ForegroundColor Yellow
   exit 1
 }
 

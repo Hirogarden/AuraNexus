@@ -1,16 +1,19 @@
-# Frontend UI
+# Core UI Framework
 PySide6>=6.6.0
 
-# Backend APIs
+# HTTP Client for Ollama (httpx supports both sync and async)
+httpx>=0.27.0
+
+# Process management
+psutil>=5.9.0
+
+# RAG (Retrieval Augmented Generation) - Built-in Memory System
+chromadb>=0.4.0
+sentence-transformers>=2.2.0
+
+# Optional: Backend API (for future extensions)
 fastapi>=0.100.0
 uvicorn>=0.22.0
-httpx
-requests>=2.31.0
-
-# Configuration & Data
 pydantic>=2.0.0
 python-dotenv>=1.0.0
 PyYAML>=5.1
-
-# LLM - Pre-built wheels (local LLM fallback if Ollama unavailable)
-llama-cpp-python[server]>=0.3.0
