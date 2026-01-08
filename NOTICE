@@ -1,0 +1,43 @@
+AuraNexus - NOTICE
+
+This project references and/or draws on the following third-party
+repositories and upstream components.  Where applicable, those
+components carry their own licenses; consult each upstream repository for
+full license texts and attributions.
+
+Referenced repositories (workspace snapshot):
+- AIDungeon
+- cagent
+- ComfyUI
+- compose-for-agents
+- crewAI
+- Extension-VRM
+- koboldcpp (AGPL)
+- kokoro
+- langchain
+- llama_index
+- mem0
+- MetaGPT
+- model-runner
+- ollama-python
+- pipecat
+- piper
+- SillyTavern (AGPL)
+- SillyTavern-Content
+- SillyTavern-Docs
+- SillyTavern-EdgeTTS-Plugin
+- SillyTavern-Fandom-Scraper
+- SillyTavern-Launcher
+- SillyTavern-WebSearch-Selenium
+- SillyTavern-YouTube-Videos-Server
+- stable-ui
+- STMP
+
+Upstream license notes:
+- koboldcpp: AGPL (see upstream repository for full license and terms)
+- SillyTavern: AGPL (see upstream repository for full license and terms)
+
+If you redistribute or modify AuraNexus, ensure compliance with the
+AGPL-3.0 and the licenses of any included third-party components.
+
+Generated: 2026-01-08
