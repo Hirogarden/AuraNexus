@@ -1,0 +1,26 @@
+# Agent container - lightweight Python instance for individual characters
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install minimal dependencies for agent runtime
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements (minimal subset for agents)
+COPY requirements.txt ./
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy agent runtime code
+COPY src/agent_runtime.py ./
+COPY src/ollama_client.py ./
+COPY src/time_utils.py ./
+
+# Agent will load character config from mounted volume
+VOLUME ["/app/character.yaml"]
+
+# Run agent with character config
+CMD ["python", "agent_runtime.py"]

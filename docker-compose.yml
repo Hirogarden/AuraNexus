@@ -1,0 +1,214 @@
+version: '3.8'
+
+services:
+  # ===== LLM BACKEND SERVICES =====
+  
+  # Ollama - Primary LLM backend
+  ollama:
+    image: ollama/ollama:latest
+    container_name: auranexus-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+      - ./data:/data
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    networks:
+      - auranexus-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+  
+  # KoboldCPP - Alternative LLM backend for GGUF models
+  koboldcpp:
+    build:
+      context: ./engines/koboldcpp
+      dockerfile: Dockerfile
+    container_name: auranexus-koboldcpp
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./engines/koboldcpp/models:/models
+    environment:
+      - KOBOLD_PORT=5001
+      - KOBOLD_HOST=0.0.0.0
+    networks:
+      - auranexus-network
+    restart: unless-stopped
+    # Uncomment for GPU support
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+  
+  # ===== CORE APPLICATION =====
+  
+  # Core Python App - Main AuraNexus orchestrator
+  core-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auranexus-core
+    ports:
+      - "8000:8000"  # API endpoint
+      - "7860:7860"  # Gradio UI (if used)
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+      - ./logs:/app/logs
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - KOBOLDCPP_BASE_URL=http://koboldcpp:5001
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - ollama
+      - koboldcpp
+    networks:
+      - auranexus-network
+    restart: unless-stopped
+  
+  # ===== DND PARTY AGENT CONTAINERS =====
+  
+  # Agent: Fighter - DND party member #1
+  agent-fighter:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: auranexus-agent-fighter
+    volumes:
+      - ./data/characters/fighter.yaml:/app/character.yaml:ro
+      - ./data/shared:/app/shared
+    environment:
+      - CHARACTER_CONFIG=/app/character.yaml
+      - AGENT_NAME=fighter
+      - AGENT_ROLE=fighter
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - KOBOLDCPP_BASE_URL=http://koboldcpp:5001
+      - CORE_APP_URL=http://core-app:8000
+    depends_on:
+      - ollama
+      - core-app
+    networks:
+      - auranexus-network
+    restart: unless-stopped
+  
+  # Agent: Wizard - DND party member #2
+  agent-wizard:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: auranexus-agent-wizard
+    volumes:
+      - ./data/characters/wizard.yaml:/app/character.yaml:ro
+      - ./data/shared:/app/shared
+    environment:
+      - CHARACTER_CONFIG=/app/character.yaml
+      - AGENT_NAME=wizard
+      - AGENT_ROLE=wizard
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - KOBOLDCPP_BASE_URL=http://koboldcpp:5001
+      - CORE_APP_URL=http://core-app:8000
+    depends_on:
+      - ollama
+      - core-app
+    networks:
+      - auranexus-network
+    restart: unless-stopped
+  
+  # Agent: Cleric - DND party member #3
+  agent-cleric:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: auranexus-agent-cleric
+    volumes:
+      - ./data/characters/cleric.yaml:/app/character.yaml:ro
+      - ./data/shared:/app/shared
+    environment:
+      - CHARACTER_CONFIG=/app/character.yaml
+      - AGENT_NAME=cleric
+      - AGENT_ROLE=cleric
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - KOBOLDCPP_BASE_URL=http://koboldcpp:5001
+      - CORE_APP_URL=http://core-app:8000
+    depends_on:
+      - ollama
+      - core-app
+    networks:
+      - auranexus-network
+    restart: unless-stopped
+  
+  # Agent: Dungeon Master - Campaign narrator
+  agent-dm:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: auranexus-agent-dm
+    volumes:
+      - ./data/characters/dungeon_master.yaml:/app/character.yaml:ro
+      - ./data/shared:/app/shared
+      - ./data/campaign:/app/campaign
+    environment:
+      - CHARACTER_CONFIG=/app/character.yaml
+      - AGENT_NAME=dungeon_master
+      - AGENT_ROLE=dm
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - KOBOLDCPP_BASE_URL=http://koboldcpp:5001
+      - CORE_APP_URL=http://core-app:8000
+    depends_on:
+      - ollama
+      - core-app
+    networks:
+      - auranexus-network
+    restart: unless-stopped
+
+  # ===== OPTIONAL SERVICES =====
+  
+  # AnythingLLM - RAG/Document management (optional)
+  # anythingllm:
+  #   image: mintplexlabs/anythingllm:latest
+  #   container_name: auranexus-anythingllm
+  #   ports:
+  #     - "3001:3001"
+  #   volumes:
+  #     - anythingllm-data:/app/server/storage
+  #   environment:
+  #     - STORAGE_DIR=/app/server/storage
+  #   networks:
+  #     - auranexus-network
+  #   restart: unless-stopped
+  
+  # SillyTavern - Chat UI frontend (optional)
+  # sillytavern:
+  #   build:
+  #     context: ./frontends/sillytavern
+  #     dockerfile: Dockerfile
+  #   container_name: auranexus-sillytavern
+  #   ports:
+  #     - "8080:8080"
+  #   volumes:
+  #     - ./frontends/sillytavern/data:/app/data
+  #   environment:
+  #     - OLLAMA_URL=http://ollama:11434
+  #   depends_on:
+  #     - ollama
+  #   networks:
+  #     - auranexus-network
+  #   restart: unless-stopped
+
+networks:
+  auranexus-network:
+    driver: bridge
+
+volumes:
+  ollama-models:
+  anythingllm-data:
