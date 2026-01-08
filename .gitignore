@@ -3,3 +3,16 @@ node_modules/
 /dist
 /*.pyc
 __pycache__/
+
+# Local planning/notes (not for commits)
+FUTURE_FEATURES.md
+ROADMAP.md
+HANDOFF_CONTEXT.md
+REPO_REVIEW_QUEUE.md
+GITHUB_UPDATE_SUMMARY.md
+profile.json
+
+# User data and local configs
+data/
+*.db
+*.sqlite
