@@ -1,43 +1,48 @@
 AuraNexus - NOTICE
 
-This project references and/or draws on the following third-party
-repositories and upstream components.  Where applicable, those
-components carry their own licenses; consult each upstream repository for
-full license texts and attributions.
+This project uses the following third-party libraries and components.
+We are grateful to the creators and maintainers of these projects.
 
-Referenced repositories (workspace snapshot):
-- AIDungeon
-- cagent
-- ComfyUI
-- compose-for-agents
-- crewAI
-- Extension-VRM
-- koboldcpp (AGPL)
-- kokoro
-- langchain
-- llama_index
-- mem0
-- MetaGPT
-- model-runner
-- ollama-python
-- pipecat
-- piper
-- SillyTavern (AGPL)
-- SillyTavern-Content
-- SillyTavern-Docs
-- SillyTavern-EdgeTTS-Plugin
-- SillyTavern-Fandom-Scraper
-- SillyTavern-Launcher
-- SillyTavern-WebSearch-Selenium
-- SillyTavern-YouTube-Videos-Server
-- stable-ui
-- STMP
+DEPENDENCIES & ACKNOWLEDGEMENTS
 
-Upstream license notes:
-- koboldcpp: AGPL (see upstream repository for full license and terms)
-- SillyTavern: AGPL (see upstream repository for full license and terms)
+PySide6 (Qt for Python)
+  License: LGPL
+  Repository: https://github.com/qtproject/pyside-pyside-setup
+  Used for: Cross-platform GUI framework
+
+Ollama
+  License: MIT
+  Repository: https://github.com/ollama/ollama
+  Used for: Local LLM inference engine
+
+Chroma
+  License: Apache 2.0
+  Repository: https://github.com/chroma-core/chroma
+  Used for: Vector database and embeddings storage
+
+Sentence Transformers
+  License: Apache 2.0
+  Repository: https://github.com/UKPLab/sentence-transformers
+  Used for: Text embeddings and semantic search
+
+httpx
+  License: BSD
+  Repository: https://github.com/encode/httpx
+  Used for: HTTP client for API communication
+
+FastAPI
+  License: MIT
+  Repository: https://github.com/tiangolo/fastapi
+  Used for: Optional backend API framework
+
+Uvicorn
+  License: BSD
+  Repository: https://github.com/encode/uvicorn
+  Used for: ASGI server implementation
+
+---
 
 If you redistribute or modify AuraNexus, ensure compliance with the
-AGPL-3.0 and the licenses of any included third-party components.
+AGPL-3.0 and the licenses of the above third-party components.
 
 Generated: 2026-01-08
