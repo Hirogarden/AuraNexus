@@ -77,24 +77,23 @@ class SecureInferenceEngine:
     def __init__(
         self,
         model_path: Optional[str] = None,
-        n_ctx: int = 2048,
-        n_gpu_layers: int = -1,
+        n_ctx: int = 2048,  # Conservative default to prevent OOM
+        n_gpu_layers: int = -1,  # -1 = auto-detect and use all
         n_batch: int = 512,
         verbose: bool = False,
-        max_memory_mb: Optional[int] = None,
-        min_free_memory_mb: int = 2048
+        # Memory safety limits
+        max_memory_mb: Optional[int] = None,  # Auto-detect if None
+        min_free_memory_mb: int = 2048  # Keep 2GB free
     ):
         """
         Initialize the secure inference engine.
         
         Args:
             model_path: Path to GGUF model file
-            n_ctx: Context window size (default 2048 for safety)
+            n_ctx: Context window size
             n_gpu_layers: Number of layers to offload to GPU (-1 for all)
             n_batch: Batch size for prompt processing
             verbose: Enable debug output
-            max_memory_mb: Maximum memory to use (auto-detect if None)
-            min_free_memory_mb: Minimum free memory to keep (default 2GB)
         """
         if not LLAMA_CPP_AVAILABLE:
             raise ImportError(
@@ -126,7 +125,7 @@ class SecureInferenceEngine:
         safe_limit = min(int(total_ram_mb * 0.75), 8192)
         return safe_limit
     
-    def _check_memory_available(self) -> tuple:
+    def _check_memory_available(self) -> tuple[bool, str]:
         """Check if sufficient memory is available."""
         mem = psutil.virtual_memory()
         available_mb = mem.available // (1024 * 1024)
@@ -136,7 +135,7 @@ class SecureInferenceEngine:
         
         return True, f"Memory OK: {available_mb}MB available"
     
-    def load_model(self, model_path: str, **kwargs) -> tuple:
+    def load_model(self, model_path: str, **kwargs) -> tuple[bool, str]:
         """
         Load a GGUF model file with memory safety checks.
         
@@ -176,7 +175,7 @@ class SecureInferenceEngine:
             self.loaded_model_path = model_path
             
             if self.verbose:
-                print(f"Model loaded successfully")
+                print(f"✓ Model loaded successfully")
                 mem_after = psutil.virtual_memory()
                 print(f"Memory usage: {mem_after.percent}% ({mem_after.used // (1024*1024)}MB used)")
             
@@ -186,15 +185,6 @@ class SecureInferenceEngine:
             error_msg = f"Error loading model: {e}"
             print(error_msg)
             return False, error_msg
-    
-    def unload_model(self):
-        """Unload the current model to free memory."""
-        if self.model is not None:
-            del self.model
-            self.model = None
-            self.loaded_model_path = None
-            if self.verbose:
-                print("Model unloaded")
     
     def is_loaded(self) -> bool:
         """Check if a model is currently loaded"""
@@ -206,7 +196,7 @@ class SecureInferenceEngine:
     
     def chat(
         self,
-        messages: List[Dict[str, str]],
+        messages: List[Message],
         system_prompt: Optional[str] = None,
         # Standard sampling
         temperature: float = 0.8,
@@ -227,199 +217,286 @@ class SecureInferenceEngine:
         dry_base: float = 1.75,
         dry_allowed_length: int = 2,
         dry_penalty_last_n: int = -1,
-        # XTC sampling (exclude top choices)
+        # XTC sampling (better diversity)
         xtc_probability: float = 0.0,
         xtc_threshold: float = 0.1,
         # Dynamic temperature
         dynatemp_range: float = 0.0,
         dynatemp_exponent: float = 1.0,
-        # Mirostat
+        # Mirostat (adaptive sampling)
         mirostat_mode: int = 0,
         mirostat_tau: float = 5.0,
         mirostat_eta: float = 0.1,
-        # Grammar/constraints
+        # Grammar/Format enforcement
         grammar: Optional[str] = None,
-        json_schema: Optional[Dict] = None,
+        json_schema: Optional[dict] = None,
         # Context management
-        n_keep: int = 0,
-        **kwargs
-    ) -> Iterator[Dict[str, Any]]:
+        n_keep: int = 0,  # Keep first N tokens (for system prompt)
+        # Other
+        seed: int = -1,
+        logit_bias: Optional[Dict[int, float]] = None,
+        logprobs: Optional[int] = None,
+        tfs_z: float = 1.0,
+        typical: float = 1.0,
+    ) -> Iterator[str] if stream else str:
         """
-        Generate a chat completion using the loaded model.
+        Generate chat completion with KoboldCpp-enhanced sampling.
         
         Args:
-            messages: List of message dicts with 'role' and 'content'
-            system_prompt: Optional system prompt (prepended if provided)
-            temperature: Randomness (0.0-2.0)
+            messages: List of Message objects
+            system_prompt: Optional system prompt
+            
+            **Standard Parameters:**
+            temperature: Sampling temperature (0-2)
             top_p: Nucleus sampling threshold
-            top_k: Top-k sampling limit
+            top_k: Top-k sampling parameter
             max_tokens: Maximum tokens to generate
-            stop: Stop sequences
-            stream: Enable streaming responses
+            stop: List of stop sequences
+            stream: Enable streaming output
             
-            Advanced KoboldCpp Features:
-            - min_p: Minimum probability threshold (better than top_p for some cases)
-            - dry_multiplier: DRY sampling strength (0.0 = off, 0.8 = recommended)
-            - xtc_probability: XTC sampling probability (0.0 = off, 0.1 = recommended)
-            - dynatemp_range: Dynamic temperature range
-            - mirostat_mode: Mirostat sampling (0=off, 1=v1, 2=v2)
-            - grammar: GBNF grammar for structured output
-            - json_schema: JSON schema for structured output
-            - n_keep: Number of tokens to keep from prompt (for context management)
+            **Advanced Sampling (KoboldCpp features):**
+            min_p: Minimum probability threshold (better than top_p)
+            typical_p: Typical sampling parameter
+            repeat_penalty: Penalty for repeating tokens
+            repeat_last_n: Look back N tokens for repetition
+            frequency_penalty: Penalize frequent tokens
+            presence_penalty: Penalize present tokens
             
-        Yields:
-            Response chunks (if stream=True) or final response (if stream=False)
+            dry_multiplier: DRY (Don't Repeat Yourself) strength (0=off)
+            dry_base: Base for DRY penalty calculation
+            dry_allowed_length: Min sequence length before DRY applies
+            dry_penalty_last_n: DRY lookback (-1=use repeat_last_n)
+            
+            xtc_probability: XTC sampling probability (0-1, 0=off)
+            xtc_threshold: XTC exclusion threshold
+            
+            dynatemp_range: Dynamic temperature range (0=off)
+            dynatemp_exponent: Dynamic temperature curve
+            
+            mirostat_mode: Mirostat mode (0=off, 1=v1, 2=v2)
+            mirostat_tau: Mirostat target entropy
+            mirostat_eta: Mirostat learning rate
+            
+            **Format Control:**
+            grammar: GBNF grammar string for constrained generation
+            json_schema: JSON schema for guaranteed valid JSON output
+            
+            **Context Control:**
+            n_keep: Keep first N tokens when context fills (for system prompt)
+            
+            **Other:**
+            seed: Random seed (-1 for random)
+            logit_bias: Token ID to bias mapping
+            logprobs: Number of logprobs to return
+            
+        Returns:
+            Generated text (or iterator if streaming)
+            
+        Example:
+            # Reduce repetition with DRY sampling
+            response = engine.chat(
+                messages=[Message(role="user", content="Tell me a story")],
+                dry_multiplier=0.8,  # Enable DRY
+                dry_base=1.75,
+                temperature=0.8
+            )
+            
+            # Force JSON output
+            response = engine.chat(
+                messages=[...],
+                json_schema={"type": "object", "properties": {...}}
+            )
         """
         if not self.is_loaded():
             raise RuntimeError("No model loaded. Call load_model() first.")
         
-        # Prepare messages for llama.cpp format
-        if system_prompt:
-            full_messages = [{"role": "system", "content": system_prompt}] + messages
-        else:
-            full_messages = messages
+        # Build chat messages for llama.cpp format
+        chat_messages = []
         
-        # Build sampling parameters
-        sampling_params = {
+        if system_prompt:
+            chat_messages.append({"role": "system", "content": system_prompt})
+        
+        for msg in messages:
+            chat_messages.append({"role": msg.role, "content": msg.content})
+        
+        # Build advanced parameters (llama-cpp-python supports most of these)
+        kwargs = {
+            "messages": chat_messages,
             "temperature": temperature,
             "top_p": top_p,
             "top_k": top_k,
             "max_tokens": max_tokens,
-            "stop": stop or [],
+            "stop": stop,
             "stream": stream,
             "repeat_penalty": repeat_penalty,
             "frequency_penalty": frequency_penalty,
             "presence_penalty": presence_penalty,
+            "seed": seed if seed != -1 else None,
         }
         
-        # Add KoboldCpp advanced features if enabled
-        if min_p > 0.0:
-            sampling_params["min_p"] = min_p
-        
-        if typical_p < 1.0:
-            sampling_params["typical_p"] = typical_p
-        
-        if dry_multiplier > 0.0:
-            sampling_params["dry_multiplier"] = dry_multiplier
-            sampling_params["dry_base"] = dry_base
-            sampling_params["dry_allowed_length"] = dry_allowed_length
-            if dry_penalty_last_n >= 0:
-                sampling_params["dry_penalty_last_n"] = dry_penalty_last_n
-        
-        if xtc_probability > 0.0:
-            sampling_params["xtc_probability"] = xtc_probability
-            sampling_params["xtc_threshold"] = xtc_threshold
-        
-        if dynatemp_range > 0.0:
-            sampling_params["dynatemp_range"] = dynatemp_range
-            sampling_params["dynatemp_exponent"] = dynatemp_exponent
-        
-        if mirostat_mode > 0:
-            sampling_params["mirostat_mode"] = mirostat_mode
-            sampling_params["mirostat_tau"] = mirostat_tau
-            sampling_params["mirostat_eta"] = mirostat_eta
-        
-        if grammar:
-            sampling_params["grammar"] = LlamaGrammar.from_string(grammar)
-        
-        if json_schema:
-            sampling_params["response_format"] = {
-                "type": "json_object",
-                "schema": json_schema
-            }
-        
-        # Add any additional kwargs
-        sampling_params.update(kwargs)
-        
-        # Generate response
+        # Add advanced parameters if llama-cpp-python version supports them
+        # (newer versions have these)
         try:
-            response = self.model.create_chat_completion(
-                messages=full_messages,
-                **sampling_params
-            )
+            # Check if parameters are supported by inspecting signature
+            import inspect
+            sig = inspect.signature(self.model.create_chat_completion)
+            params = sig.parameters
             
-            if stream:
-                # Streaming mode - yield chunks
-                for chunk in response:
-                    if "choices" in chunk and len(chunk["choices"]) > 0:
-                        delta = chunk["choices"][0].get("delta", {})
-                        if "content" in delta:
-                            yield {"content": delta["content"]}
-            else:
-                # Non-streaming mode - yield full response
-                if "choices" in response and len(response["choices"]) > 0:
-                    message = response["choices"][0]["message"]
-                    yield {
-                        "role": message["role"],
-                        "content": message["content"]
-                    }
-        
+            if "min_p" in params:
+                kwargs["min_p"] = min_p
+            if "typical_p" in params:
+                kwargs["typical_p"] = typical_p
+            if "tfs_z" in params:
+                kwargs["tfs_z"] = tfs_z
+            if "mirostat_mode" in params:
+                kwargs["mirostat_mode"] = mirostat_mode
+                kwargs["mirostat_tau"] = mirostat_tau
+                kwargs["mirostat_eta"] = mirostat_eta
+            if "logit_bias" in params and logit_bias:
+                kwargs["logit_bias"] = logit_bias
+            if "logprobs" in params and logprobs:
+                kwargs["logprobs"] = logprobs
+                
+            # Grammar/JSON schema support
+            if json_schema and "response_format" in params:
+                kwargs["response_format"] = {
+                    "type": "json_object",
+                    "schema": json_schema
+                }
+            elif grammar and "grammar" in params:
+                kwargs["grammar"] = grammar
+                
         except Exception as e:
-            raise RuntimeError(f"Error during inference: {e}")
+            if self.verbose:
+                print(f"Note: Some advanced parameters not available: {e}")
+        
+        # Generate completion
+        response = self.model.create_chat_completion(**kwargs)
+        
+        if stream:
+            # Return streaming iterator
+            def stream_wrapper():
+                for chunk in response:
+                    delta = chunk.get('choices', [{}])[0].get('delta', {})
+                    content = delta.get('content', '')
+                    if content:
+                        yield content
+            return stream_wrapper()
+        else:
+            # Return complete response
+            content = response.get('choices', [{}])[0].get('message', {}).get('content', '')
+            return content
     
     def generate(
         self,
         prompt: str,
-        max_tokens: int = 512,
         temperature: float = 0.8,
         top_p: float = 0.95,
         top_k: int = 40,
-        stream: bool = False,
-        **kwargs
-    ) -> Iterator[str]:
+        max_tokens: int = 512,
+        stop: Optional[List[str]] = None,
+        stream: bool = False
+    ) -> Iterator[str] if stream else str:
         """
-        Generate text completion (non-chat mode).
+        Generate text completion (simpler interface).
         
         Args:
-            prompt: Input text
-            max_tokens: Maximum tokens to generate
-            temperature: Randomness
+            prompt: Input prompt
+            temperature: Sampling temperature
             top_p: Nucleus sampling
             top_k: Top-k sampling
+            max_tokens: Max tokens to generate
+            stop: Stop sequences
             stream: Enable streaming
-            **kwargs: Additional sampling parameters
             
-        Yields:
-            Generated text chunks
+        Returns:
+            Generated text (or iterator if streaming)
         """
         if not self.is_loaded():
             raise RuntimeError("No model loaded. Call load_model() first.")
         
         response = self.model(
-            prompt,
-            max_tokens=max_tokens,
+            prompt=prompt,
             temperature=temperature,
             top_p=top_p,
             top_k=top_k,
+            max_tokens=max_tokens,
+            stop=stop,
             stream=stream,
-            **kwargs
+            echo=False
         )
         
         if stream:
-            for chunk in response:
-                if "choices" in chunk and len(chunk["choices"]) > 0:
-                    text = chunk["choices"][0].get("text", "")
+            def stream_wrapper():
+                for chunk in response:
+                    text = chunk.get('choices', [{}])[0].get('text', '')
                     if text:
                         yield text
+            return stream_wrapper()
         else:
-            if "choices" in response and len(response["choices"]) > 0:
-                yield response["choices"][0]["text"]
+            return response.get('choices', [{}])[0].get('text', '')
     
     def embed(self, text: str) -> List[float]:
         """
-        Generate embeddings for text (requires embedding model).
+        Generate embeddings for text (for RAG/memory systems).
         
         Args:
             text: Input text
             
         Returns:
-            Embedding vector
+            Embedding vector (list of floats)
         """
         if not self.is_loaded():
             raise RuntimeError("No model loaded. Call load_model() first.")
         
-        try:
-            embedding = self.model.create_embedding(text)
-            return embedding["data"][0]["embedding"]
-        except Exception as e:
-            raise RuntimeError(f"Error generating embedding: {e}")
+        return self.model.embed(text)
+    
+    def get_model_info(self) -> Dict[str, Any]:
+        """Get information about the loaded model"""
+        if not self.is_loaded():
+            return {"loaded": False}
+        
+        return {
+            "loaded": True,
+            "model_path": self.loaded_model_path,
+            "context_size": self.n_ctx,
+            "gpu_layers": self.n_gpu_layers,
+            "batch_size": self.n_batch
+        }
+    
+    def unload_model(self):
+        """Unload the current model from memory"""
+        if self.model is not None:
+            del self.model
+            self.model = None
+            self.loaded_model_path = None
+
+
+# Convenience function for quick testing
+def test_inference(model_path: str):
+    """Test the inference engine with a simple prompt"""
+    print("Initializing Secure Inference Engine...")
+    engine = SecureInferenceEngine(model_path=model_path, verbose=True)
+    
+    print("\nGenerating response...")
+    messages = [
+        Message(role="user", content="Hello! Can you tell me about yourself?")
+    ]
+    
+    response = engine.chat(
+        messages=messages,
+        system_prompt="You are Aura, a helpful AI assistant.",
+        max_tokens=200
+    )
+    
+    print(f"\nResponse: {response}")
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1:
+        test_inference(sys.argv[1])
+    else:
+        print("Usage: python secure_inference_engine.py <path_to_model.gguf>")
+        print("\nSecure Inference Engine Status:")
+        print(f"llama-cpp-python available: {LLAMA_CPP_AVAILABLE}")

@@ -12,25 +12,26 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from PySide6.QtWidgets import QApplication, QMessageBox
-from secure_chat import SecureChatWindow
+from unified_chat_window import UnifiedChatWindow
 
 def main():
     app = QApplication(sys.argv)
     
     # Set application metadata
     app.setApplicationName("AuraNexus")
-    app.setApplicationDisplayName("AuraNexus Secure Chat")
+    app.setApplicationDisplayName("AuraNexus - Unified Chat")
     app.setOrganizationName("AuraNexus")
     
     # Note: No external services to start - everything runs in-process!
     # The SecureInferenceEngine loads models directly when needed.
     
-    print("Starting AuraNexus Secure Chat...")
+    print("Starting AuraNexus Unified Chat...")
     print("Using in-process inference (no external services)")
+    print("Modes: AI Chatbot, Storyteller, AI Assistant")
     
-    # Create and show chat window
+    # Create and show unified chat window
     try:
-        window = SecureChatWindow(project_name="Chat")
+        window = UnifiedChatWindow()
         window.show()
     except Exception as e:
         print(f"Error creating chat window: {e}")
