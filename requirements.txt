@@ -1,19 +1,43 @@
 # Core UI Framework
 PySide6>=6.6.0
 
-# HTTP Client for Ollama (httpx supports both sync and async)
-httpx>=0.27.0
+# ============================================================================
+# SECURE INFERENCE ENGINE (In-Process, No External Dependencies)
+# ============================================================================
+# Direct llama.cpp Python bindings - runs models in-process
+# This is the ONLY inference dependency needed
+llama-cpp-python>=0.2.0
 
-# Process management
+# For GPU acceleration, install with:
+# CMAKE_ARGS="-DLLAMA_CUBLAS=on" pip install llama-cpp-python  # NVIDIA
+# CMAKE_ARGS="-DLLAMA_HIPBLAS=on" pip install llama-cpp-python  # AMD
+
+# ============================================================================
+# SYSTEM MONITORING
+# ============================================================================
+# Process management and system info
 psutil>=5.9.0
 
-# RAG (Retrieval Augmented Generation) - Built-in Memory System
-chromadb>=0.4.0
-sentence-transformers>=2.2.0
+# ============================================================================
+# RAG (OPTIONAL - Can be disabled for security)
+# ============================================================================
+# Built-in Memory System - OPTIONAL, can comment out for air-gapped systems
+# chromadb>=0.4.0
+# sentence-transformers>=2.2.0
 
-# Optional: Backend API (for future extensions)
-fastapi>=0.100.0
-uvicorn>=0.22.0
-pydantic>=2.0.0
-python-dotenv>=1.0.0
-PyYAML>=5.1
+# ============================================================================
+# BACKEND API (OPTIONAL - For future extensions)
+# ============================================================================
+# Optional: REST API capabilities
+# fastapi>=0.100.0
+# uvicorn>=0.22.0
+# pydantic>=2.0.0
+# python-dotenv>=1.0.0
+# PyYAML>=5.1
+
+# ============================================================================
+# REMOVED DEPENDENCIES (No longer needed)
+# ============================================================================
+# httpx - Was for Ollama API calls (NOW REMOVED - using in-process inference)
+# requests - Not needed, no external API calls
+

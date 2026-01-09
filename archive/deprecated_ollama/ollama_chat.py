@@ -24,19 +24,24 @@ from time_utils import (
 from vram_monitor import VRAMMonitoringSession, VRAMThresholds, get_current_vram_usage
 from gguf_architecture import ArchitectureDetector, ModelMetadata, Architecture
 
-# RAG imports (optional)
-try:
-    from builtin_rag import BuiltInRAG, RAG_AVAILABLE
-except ImportError:
-    RAG_AVAILABLE = False
-    BuiltInRAG = None
+# RAG imports (optional) - DISABLED FOR NOW due to slow torch/transformers imports
+# TODO: Make builtin_rag lazy-load dependencies
+RAG_AVAILABLE = False
+BuiltInRAG = None
+# try:
+#     from builtin_rag import BuiltInRAG, RAG_AVAILABLE
+# except Exception as e:
+#     RAG_AVAILABLE = False
+#     BuiltInRAG = None
+#     print(f"Warning: RAG functionality disabled due to import error: {e}")
 
 try:
     from anythingllm_client import AnythingLLMClient
     ANYTHINGLLM_AVAILABLE = True
-except ImportError:
+except Exception as e:
     ANYTHINGLLM_AVAILABLE = False
     AnythingLLMClient = None
+    print(f"Warning: AnythingLLM functionality disabled due to import error: {e}")
 
 
 class ChatWorker(QThread):
@@ -443,17 +448,27 @@ class OllamaChatWindow(QMainWindow):
         self.statusBar().showMessage(f"Ready | {vram_summary}")
     
     def load_models(self):
-        """Load available Ollama models."""
+        """Load available Ollama models with retry logic."""
         # Clear existing items to prevent duplication
         self.model_combo.clear()
         
-        models = self.client.list_models()
-        if models:
-            self.model_combo.addItems(models)
-            self.update_vram_status()
-        else:
-            self.model_combo.addItem("llama3")
-            self.statusBar().showMessage("Could not connect to Ollama - using default model")
+        # Try a few times in case Ollama just started
+        max_retries = 3
+        for attempt in range(max_retries):
+            models = self.client.list_models()
+            if models:
+                self.model_combo.addItems(models)
+                self.update_vram_status()
+                return
+            
+            # Wait a bit before retrying (except on last attempt)
+            if attempt < max_retries - 1:
+                import time
+                time.sleep(1)
+        
+        # If we get here, couldn't connect
+        self.model_combo.addItem("llama3")
+        self.statusBar().showMessage("Could not connect to Ollama - check if Ollama is running")
     
     def append_message(self, role: str, content: str, timestamp: datetime = None):
         """Append a message to the chat display with optional timestamp."""

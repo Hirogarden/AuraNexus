@@ -32,8 +32,8 @@ from PySide6.QtGui import QFont, QIcon, QPixmap
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-# Import Ollama-based chat window
-from ollama_chat import OllamaChatWindow
+# Import secure chat window
+from secure_chat import SecureChatWindow
 """
 
 
@@ -100,7 +100,7 @@ class ProjectLauncher(QMainWindow):
         layout.addStretch()
     
     def launch_project_a(self):
-        """Launch Project A (Basic Assistant with Ollama)."""
+        """Launch Project A (Basic Assistant with Secure Inference)."""
         print("Launching Project A: Basic Assistant...")
         
         system_prompt = (
@@ -108,7 +108,7 @@ class ProjectLauncher(QMainWindow):
             "Provide clear, concise answers and be supportive."
         )
         
-        self.chat_window = OllamaChatWindow("Project A: Basic Assistant", system_prompt)
+        self.chat_window = SecureChatWindow("Project A: Basic Assistant", system_prompt)
         self.chat_window.show()
         self.close()
     
@@ -122,7 +122,7 @@ class ProjectLauncher(QMainWindow):
             "Be imaginative, expressive, and maintain consistent character personalities."
         )
         
-        self.chat_window = OllamaChatWindow("Project B: Interactive Storyteller", system_prompt)
+        self.chat_window = SecureChatWindow("Project B: Interactive Storyteller", system_prompt)
         self.chat_window.show()
         self.close()
     
@@ -136,7 +136,7 @@ class ProjectLauncher(QMainWindow):
             "technical help, emotional support, and more. Be warm, intelligent, and adaptive."
         )
         
-        self.chat_window = OllamaChatWindow("Project C: Full Companion", system_prompt)
+        self.chat_window = SecureChatWindow("Project C: Full Companion", system_prompt)
         self.chat_window.show()
         self.close()
 

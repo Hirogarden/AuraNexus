@@ -1,0 +1,28 @@
+# AuraNexus Secure Inference Engine
+# Requirements for self-contained, HIPAA-compliant LLM inference
+
+# ============================================================================
+# SECURE INFERENCE ENGINE (No External Dependencies)
+# ============================================================================
+
+# Direct llama.cpp Python bindings - runs models in-process
+llama-cpp-python>=0.2.0
+
+# GGUF model support (native format)
+# Already included in llama-cpp-python
+
+# GPU acceleration (optional, will compile with CUDA/ROCm if available)
+# Set environment variables before install:
+# CMAKE_ARGS="-DLLAMA_CUBLAS=on" pip install llama-cpp-python  # For NVIDIA
+# CMAKE_ARGS="-DLLAMA_HIPBLAS=on" pip install llama-cpp-python  # For AMD
+
+# ============================================================================
+# NOTES:
+# ============================================================================
+# - llama-cpp-python provides complete inference engine
+# - No external processes or API calls
+# - All data stays in Python process memory
+# - Supports streaming, batching, embeddings
+# - GGUF format (Llama, Mistral, Phi, etc.)
+# - Can run on CPU or GPU
+# - Memory efficient with quantization support
