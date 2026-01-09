@@ -35,12 +35,13 @@ class DockerManager:
             if not self.compose_file.exists():
                 raise FileNotFoundError(f"docker-compose.yml not found at {self.compose_file}")
             
+            # Increased timeout for image pulling (10 minutes)
             result = subprocess.run(
                 ['docker-compose', 'up', '-d'],
                 cwd=str(self.project_root),
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=600
             )
             
             if result.returncode != 0:
@@ -143,3 +144,25 @@ class DockerManager:
             return result.returncode == 0
         except:
             return False
+    
+    def pull_images(self) -> bool:
+        """Pull all images defined in docker-compose.yml"""
+        try:
+            result = subprocess.run(
+                ['docker-compose', 'pull'],
+                cwd=str(self.project_root),
+                capture_output=True,
+                text=True,
+                timeout=600  # 10 minutes for pulling images
+            )
+            
+            if result.returncode != 0:
+                error_msg = result.stderr or result.stdout or "Unknown error"
+                raise RuntimeError(f"Failed to pull images: {error_msg}")
+            
+            return True
+            
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Image pull timed out after 10 minutes")
+        except Exception as e:
+            raise RuntimeError(f"Failed to pull images: {e}")

@@ -1,0 +1,119 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>AuraNexus</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+      color: white;
+    }
+    .container {
+      max-width: 1000px;
+      margin: 50px auto;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    .status {
+      text-align: center;
+      font-size: 18px;
+      opacity: 0.8;
+    }
+    .chat-container {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 20px;
+      margin-top: 30px;
+      min-height: 400px;
+    }
+    #messages {
+      height: 350px;
+      overflow-y: auto;
+      margin-bottom: 20px;
+    }
+    .message {
+      background: rgba(255, 255, 255, 0.2);
+      padding: 10px;
+      border-radius: 5px;
+      margin-bottom: 10px;
+    }
+    input {
+      width: calc(100% - 100px);
+      padding: 10px;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+    }
+    button {
+      width: 90px;
+      padding: 10px;
+      background: #4A90E2;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:hover {
+      background: #357ABD;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1> AuraNexus</h1>
+    <p class="status">Multi-Agent AI Companion System</p>
+    
+    <div class="chat-container">
+      <div id="messages"></div>
+      <div>
+        <input type="text" id="userInput" placeholder="Talk to your party...">
+        <button onclick="sendMessage()">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function sendMessage() {
+      const input = document.getElementById('userInput');
+      const message = input.value.trim();
+      if (!message) return;
+
+      addMessage('You', message);
+      input.value = '';
+
+      // Call Python backend
+      try {
+        const response = await fetch('http://localhost:8000/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message })
+        });
+        const data = await response.json();
+        addMessage(data.agent, data.response);
+      } catch (error) {
+        addMessage('System', 'Backend not ready yet...');
+      }
+    }
+
+    function addMessage(sender, text) {
+      const messagesDiv = document.getElementById('messages');
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'message';
+      messageDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
+      messagesDiv.appendChild(messageDiv);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    document.getElementById('userInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+  </script>
+</body>
+</html>

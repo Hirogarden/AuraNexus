@@ -40,38 +40,18 @@ class UpdateChecker(QThread):
             # Step 2: Check Docker installation
             self.progress.emit("Checking Docker installation...", 15, "")
             if not self.check_docker_installed():
-                self.progress.emit("Docker not found", 15, "Installing Docker Desktop...")
-                if not self.install_docker():
-                    self.error.emit("Failed to install Docker Desktop")
-                    self.finished.emit(False)
-                    return
+                self.error.emit("Docker Desktop is not running. Please start Docker Desktop and try again.")
+                self.finished.emit(False)
+                return
             
-            # Step 3: Check Docker images
-            self.progress.emit("Checking for image updates...", 30, "")
-            updates = self.check_image_updates()
-            
-            if updates:
-                auto_update = self.config.get('updates.auto_install_images', False)
-                
-                if auto_update:
-                    # Pull updates automatically
-                    for i, image in enumerate(updates):
-                        pct = 30 + int(40 * (i / len(updates)))
-                        self.progress.emit(
-                            f"Updating {image}...",
-                            pct,
-                            f"Downloading latest version ({i+1}/{len(updates)})"
-                        )
-                        self.pull_image(image)
-                else:
-                    # Skip updates for now
-                    self.progress.emit(
-                        "Updates available",
-                        40,
-                        f"{len(updates)} image(s) can be updated. Check settings to enable auto-update."
-                    )
-            else:
-                self.progress.emit("Images up to date", 40, "All images are current")
+            # Step 3: Pull required images
+            self.progress.emit("Pulling Docker images...", 30, "This may take several minutes for first-time setup")
+            try:
+                self.docker_manager.pull_images()
+            except RuntimeError as e:
+                self.error.emit(str(e))
+                self.finished.emit(False)
+                return
             
             # Step 4: Start services
             self.progress.emit("Starting AuraNexus services...", 70, "")
@@ -192,14 +172,30 @@ del "%~f0"
             return False
     
     def check_docker_installed(self) -> bool:
-        """Check if Docker Desktop is installed"""
+        """Check if Docker Desktop is installed and running"""
         try:
+            # Check if Docker is installed
             result = subprocess.run(
                 ['docker', '--version'],
                 capture_output=True,
                 timeout=5
             )
+            if result.returncode != 0:
+                return False
+            
+            # Check if Docker daemon is running
+            result = subprocess.run(
+                ['docker', 'info'],
+                capture_output=True,
+                timeout=10
+            )
             return result.returncode == 0
+        except FileNotFoundError:
+            # Docker not installed
+            return False
+        except subprocess.TimeoutExpired:
+            # Docker might be installed but not responding
+            return False
         except:
             return False
     

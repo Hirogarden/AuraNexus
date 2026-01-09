@@ -38,6 +38,7 @@ class LauncherWindow(QMainWindow):
         self.config = LauncherConfig()
         self.docker_manager = DockerManager()
         self.tray_icon = None
+        self.services_started = False  # Track if services are running
         
         self.setup_ui()
         
@@ -166,6 +167,7 @@ class LauncherWindow(QMainWindow):
     def on_update_finished(self, success: bool):
         """Handle update check completion"""
         if success:
+            self.services_started = True  # Mark services as started
             self.status_label.setText("✓ Ready to launch!")
             self.progress_bar.setValue(100)
             self.details_label.setText("All services are running")
@@ -348,17 +350,23 @@ class LauncherWindow(QMainWindow):
             QApplication.quit()
     
     def closeEvent(self, event):
-        """Handle window close - minimize to tray instead"""
-        event.ignore()
-        self.hide()
-        
-        if self.tray_icon and not self.tray_icon.isVisible():
-            self.tray_icon.showMessage(
-                "AuraNexus",
-                "Application minimized to system tray",
-                QSystemTrayIcon.Information,
-                2000
-            )
+        """Handle window close"""
+        if self.services_started and self.tray_icon:
+            # Services are running - minimize to tray
+            event.ignore()
+            self.hide()
+            
+            if not self.tray_icon.isVisible():
+                self.tray_icon.showMessage(
+                    "AuraNexus",
+                    "Application minimized to system tray",
+                    QSystemTrayIcon.Information,
+                    2000
+                )
+        else:
+            # Services not started yet - allow quit
+            event.accept()
+            QApplication.quit()
 
 
 def main():

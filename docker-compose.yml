@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # ===== LLM BACKEND SERVICES =====
   
@@ -27,9 +25,7 @@ services:
   
   # KoboldCPP - Alternative LLM backend for GGUF models
   koboldcpp:
-    build:
-      context: ./engines/koboldcpp
-      dockerfile: Dockerfile
+    image: ghcr.io/lostruins/koboldcpp:latest
     container_name: auranexus-koboldcpp
     ports:
       - "5001:5001"
@@ -41,10 +37,6 @@ services:
     networks:
       - auranexus-network
     restart: unless-stopped
-    # Uncomment for GPU support
-    # deploy:
-    #   resources:
-    #     reservations:
     #       devices:
     #         - driver: nvidia
     #           count: all
