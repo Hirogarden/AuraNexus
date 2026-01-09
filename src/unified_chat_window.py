@@ -131,53 +131,20 @@ class UnifiedChatWindow(QMainWindow):
         main_layout.addWidget(sidebar)
         
         # === CENTER + RIGHT (Chat + Settings) ===
-        splitter = QSplitter(Qt.Horizontal)
+        self.splitter = QSplitter(Qt.Horizontal)
         
         # Center: Chat area
         chat_widget = self._create_chat_area()
-        splitter.addWidget(chat_widget)
+        self.splitter.addWidget(chat_widget)
         
         # Right: Settings panel (collapsible)
-        self.settings_container = QWidget()
-        settings_container_layout = QVBoxLayout(self.settings_container)
-        settings_container_layout.setContentsMargins(0, 0, 0, 0)
-        settings_container_layout.setSpacing(0)
-        
-        # Toggle button
-        self.settings_toggle_btn = QPushButton("⚙ Settings")
-        self.settings_toggle_btn.setCheckable(True)
-        self.settings_toggle_btn.setChecked(True)
-        self.settings_toggle_btn.setFixedHeight(40)
-        self.settings_toggle_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #5865F2;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                font-size: 14px;
-                font-weight: bold;
-                padding: 8px;
-            }
-            QPushButton:hover {
-                background-color: #4752C4;
-            }
-            QPushButton:checked {
-                background-color: #3C45A5;
-            }
-        """)
-        self.settings_toggle_btn.clicked.connect(self._toggle_settings_panel)
-        settings_container_layout.addWidget(self.settings_toggle_btn)
-        
-        # Settings panel
-        self.settings_widget = self._create_settings_panel()
-        settings_container_layout.addWidget(self.settings_widget)
-        
-        splitter.addWidget(self.settings_container)
+        self.settings_container = self._create_settings_panel()
+        self.splitter.addWidget(self.settings_container)
         
         # Set initial sizes (70% chat, 30% settings)
-        splitter.setSizes([700, 300])
+        self.splitter.setSizes([700, 300])
         
-        main_layout.addWidget(splitter, stretch=1)
+        main_layout.addWidget(self.splitter, stretch=1)
         
         # Status bar
         self.statusBar().showMessage("Ready - No model loaded")
@@ -222,6 +189,32 @@ class UnifiedChatWindow(QMainWindow):
             self.project_buttons[project_id] = btn
         
         layout.addStretch()
+        
+        # Settings toggle button (positioned 1/4 above Clear Chat)
+        layout.addSpacing(20)
+        self.settings_toggle_btn = QPushButton("⚙  Settings")
+        self.settings_toggle_btn.setCheckable(True)
+        self.settings_toggle_btn.setChecked(True)
+        self.settings_toggle_btn.setFixedHeight(40)
+        self.settings_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #5865F2;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                font-size: 13px;
+                font-weight: bold;
+                padding: 8px;
+            }
+            QPushButton:hover {
+                background-color: #4752C4;
+            }
+            QPushButton:checked {
+                background-color: #3C45A5;
+            }
+        """)
+        self.settings_toggle_btn.clicked.connect(self._toggle_settings_panel)
+        layout.addWidget(self.settings_toggle_btn)
         
         # Clear conversation button
         clear_btn = QPushButton("🗑️  Clear Chat")
@@ -930,11 +923,19 @@ class UnifiedChatWindow(QMainWindow):
     def _toggle_settings_panel(self):
         """Toggle visibility of settings panel."""
         is_visible = self.settings_toggle_btn.isChecked()
-        self.settings_widget.setVisible(is_visible)
+        
         if is_visible:
-            self.settings_toggle_btn.setText("⚙ Settings")
+            # Show settings panel
+            self.settings_container.setVisible(True)
+            sizes = self.splitter.sizes()
+            total = sum(sizes)
+            self.splitter.setSizes([total - 300, 300])
         else:
-            self.settings_toggle_btn.setText("⚙ Show Settings")
+            # Completely hide settings panel
+            sizes = self.splitter.sizes()
+            total = sum(sizes)
+            self.settings_container.setVisible(False)
+            self.splitter.setSizes([total, 0])
     
     def _browse_model(self):
         """Browse for a model file."""
