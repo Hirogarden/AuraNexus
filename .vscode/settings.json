@@ -1,0 +1,115 @@
+{
+  // AuraNexus VS Code Settings
+  // Reminds developers about HIPAA compliance requirements
+  
+  "files.associations": {
+    "HIPAA_COMPLIANCE.md": "markdown",
+    "SECURITY_CHECKLIST.md": "markdown"
+  },
+  
+  "editor.rulers": [80, 120],
+  
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": true,
+  "python.linting.pylintArgs": [
+    "--disable=C0103,C0114,C0115,C0116",
+    "--max-line-length=120"
+  ],
+  
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  
+  // Security-focused settings
+  "files.exclude": {
+    "**/*.pyc": true,
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/node_modules": true
+  },
+  
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.venv": true,
+    "**/build": true,
+    "**/dist": true
+  },
+  
+  // Code snippets reminder
+  "editor.snippetSuggestions": "top",
+  
+  // Git settings
+  "git.ignoreLimitWarning": true,
+  
+  // Custom tasks
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "⚠️ Security Review",
+        "type": "shell",
+        "command": "echo",
+        "args": [
+          "REMINDER: Before implementing features, check:",
+          "1. HIPAA_COMPLIANCE.md - Core principles",
+          "2. SECURITY_CHECKLIST.md - Feature checklist",
+          "3. All PHI must be encrypted",
+          "4. No external API calls with PHI",
+          "5. Audit all PHI access"
+        ],
+        "presentation": {
+          "reveal": "always",
+          "panel": "dedicated",
+          "focus": true
+        }
+      },
+      {
+        "label": "Run HIPAA Compliance Tests",
+        "type": "shell",
+        "command": "python",
+        "args": ["electron-app/test_inprocess_llm.py"],
+        "problemMatcher": [],
+        "group": {
+          "kind": "test",
+          "isDefault": true
+        }
+      }
+    ]
+  },
+  
+  // TODO highlights for security
+  "todohighlight.keywords": [
+    {
+      "text": "SECURITY:",
+      "color": "#ff0000",
+      "backgroundColor": "#ffcccc",
+      "isWholeLine": false
+    },
+    {
+      "text": "PHI:",
+      "color": "#ff0000",
+      "backgroundColor": "#ffcccc",
+      "isWholeLine": false
+    },
+    {
+      "text": "HIPAA:",
+      "color": "#ff6600",
+      "backgroundColor": "#ffe6cc",
+      "isWholeLine": false
+    },
+    {
+      "text": "ENCRYPT:",
+      "color": "#ff6600",
+      "backgroundColor": "#ffe6cc",
+      "isWholeLine": false
+    }
+  ],
+  
+  // Workspace recommendations
+  "extensions.recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.debugpy",
+    "wayou.vscode-todo-highlight",
+    "streetsidesoftware.code-spell-checker"
+  ]
+}
