@@ -135,12 +135,16 @@ STATUS: Phase 2 Implementation
 IMPLEMENTATION:
   
   PEER SPECIALIST DISCLOSURE:
-    - Clear disclosure that support is provided by a Peer Specialist
-    - Definition: "A mental health patient who has reached a point in their 
-      recovery where they work to help others"
+    - Clear disclosure that support is provided by a state-certified Peer Specialist
+    - Creator's lived experience with mental health challenges
+    - Creator's professional work with mental health AND substance use recovery
+    - Personal diagnosis disclosure (for connection and reducing stigma)
+    - Family history with substance use (authenticity and relatability)
+    - Message of hope: "Mental health challenges can be managed"
     - Distinction from licensed therapy/counseling
     - Credentials and limitations clearly stated
     - Displayed prominently on first launch and in settings
+    - Emphasis on recovery/management being possible (not "stuck with disease")
   
   TERMS OF SERVICE WITH COMPREHENSION CHECK:
     - Users must read ToS before accessing mental health features

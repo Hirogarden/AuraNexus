@@ -20,11 +20,63 @@ AuraNexus is a **peer support tool** powered by AI, created to provide emotional
 
 ### About the Creator
 
-This application was developed by a **Peer Specialist** - a person with lived experience of mental health challenges who has reached a point in their recovery where they work to help others. Peer Specialists:
-- Have personal experience with mental health recovery
-- Are trained to support others using their lived experience
-- Are **not** licensed therapists, counselors, or medical professionals
-- Provide support, education, and hope based on their journey
+This application was developed by a **certified Peer Specialist** - someone who truly understands what you're going through because I've been there too.
+
+#### My Credentials & Experience
+
+I am a **state-certified Mental Health Peer Specialist** who works with individuals facing:
+- Mental health challenges
+- Drug and alcohol recovery
+- Co-occurring disorders (mental health + substance use)
+
+**What this means:**
+- I have specialized training and certification recognized by my state
+- I work professionally in peer support roles
+- I combine lived experience with evidence-based practices
+- I am **not** a licensed therapist, counselor, or medical professional
+
+#### My Lived Experience
+
+**I share this to connect with you, not to make this about me - but to show you that recovery and management are possible.**
+
+I live with **[YOUR DIAGNOSIS]** and have walked the difficult path of mental health recovery. I know what it feels like to struggle, to feel stuck, to wonder if things will ever get better.
+
+I also come from a family touched by substance use challenges. I've watched loved ones struggle with drug and alcohol problems. I've experienced the ripple effects that addiction creates in families. This isn't just theoretical knowledge for me - it's personal.
+
+#### Why I Believe in Peer Support
+
+**Here's what I want you to know:** Having a mental health condition doesn't mean you're stuck with a disease that can't be cured. While some conditions are chronic, they **can be managed**. Recovery looks different for everyone, but it's possible.
+
+I believe deeply in the power of peer support because:
+- **Lived experience matters** - I understand in a way textbooks can't teach
+- **Hope is contagious** - Seeing someone who's been there and made progress can spark your own hope
+- **You're not alone** - Sharing struggles reduces shame and isolation
+- **Management is possible** - Symptoms can be reduced, coping skills work, life can improve
+- **Recovery is real** - Not "cured" necessarily, but living well despite challenges
+
+I created AuraNexus because I wish I'd had something like this during my darkest times. A safe, private space to process feelings, learn skills, and feel supported - without judgment, without cost barriers, without fear of stigma.
+
+**You deserve support. Your struggles are valid. And there is hope.**
+
+#### What I'm NOT
+
+While I bring deep lived experience and professional training:
+- ❌ I am not a licensed therapist, counselor, or psychologist
+- ❌ I cannot diagnose conditions or prescribe medication
+- ❌ I cannot provide clinical treatment or therapy
+- ❌ This app is not supervised by medical professionals
+
+**Peer support complements professional care - it doesn't replace it.**
+
+#### My Commitment to You
+
+I commit to:
+- ✅ Respecting your privacy absolutely (your data is yours alone)
+- ✅ Providing judgment-free support
+- ✅ Teaching evidence-based coping skills
+- ✅ Being honest about limitations
+- ✅ Encouraging professional help when needed
+- ✅ Believing in your capacity for growth and recovery
 
 **Important:** While peer support can be incredibly valuable, it is **not a substitute for professional medical care, therapy, or counseling.**
 
@@ -396,5 +448,6 @@ Thank you for trusting AuraNexus with your mental health journey. We're honored 
 ---
 
 *Version 1.0 - [Date]*  
-*Created by a Peer Specialist with lived experience*  
+*Created by a state-certified Mental Health Peer Specialist with lived experience*  
+*"I've been there. Recovery is possible. You're not alone."*  
 *HIPAA-compliant architecture | Encrypted | Private | Local-first*
