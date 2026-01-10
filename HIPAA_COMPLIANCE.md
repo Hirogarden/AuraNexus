@@ -301,10 +301,75 @@ IMPLEMENTATION:
 REQUIREMENT: Emotional state data is highly sensitive PHI
 IMPLEMENTATION:
   - Treat mood/emotion logs as medical records
-  - Encrypt emotional state database
+  - Encrypt emotional state database with HIGHEST security level
   - No external sentiment analysis APIs
   - Local emotion detection only
-  - User can delete emotional history
+  - User can delete emotional history with single button + confirmation
+  - Separate encryption keys for mental health data (crypto shredding on delete)
+```
+
+### Multi-Agent Chat Security
+```
+REQUIREMENT: Different chat contexts require different security levels
+IMPLEMENTATION:
+  
+  HIGHEST SECURITY (Mental Health PHI):
+    - Emotional Support Agent conversations
+    - Project Three AI Assistant conversations (relationship building)
+    - Separate encrypted storage from general chats
+    - Separate encryption keys (allows selective deletion)
+    - Additional encryption layer beyond standard PHI
+  
+  STANDARD SECURITY (Non-PHI):
+    - General storytelling/creative agents
+    - Standard encryption
+    - Normal retention policies
+```
+
+### Observer Mode (AI Assistant Context Sharing)
+```
+REQUIREMENT: Allow Project Three AI to observe mental health sessions with user consent
+IMPLEMENTATION:
+  - User must explicitly enable observer mode (opt-in, not default)
+  - Clear UI indicator when AI is "sitting in" on session
+  - Observer access logged in audit trail
+  - AI receives mental health context to provide:
+    * Supportive responses in other interactions
+    * Mental health-aware reminders
+    * Contextual check-ins
+  - Observer data stored separately but with same encryption
+  - Deleted together with mental health data when user requests
+  
+SECURITY CONSIDERATIONS:
+  - Observer mode preference encrypted with mental health data
+  - Project Three AI memory of mental health context encrypted separately
+  - Both deleted atomically when "Delete Mental Health Data" pressed
+  - No cross-contamination with non-mental-health AI interactions
+  - Audit log shows when observer mode enabled/disabled
+```
+
+### Selective Data Deletion
+```
+REQUIREMENT: User can delete ALL mental health data with one action
+IMPLEMENTATION:
+  - Single "Delete Mental Health Data" button in settings
+  - Confirmation dialog (prevents accidental deletion)
+  - Deletes ALL of:
+    * Emotional support conversations
+    * Mental health session transcripts
+    * Emotional state logs and mood tracking
+    * Crisis detection history
+    * Project Three AI mental health observations
+    * Project Three AI supportive reminders/context
+    * Observer mode settings and logs
+  - Uses crypto shredding (destroy encryption keys)
+  - Irreversible deletion (cannot be recovered)
+  - Preserves non-mental-health data:
+    * General AI assistant conversations (non-therapeutic)
+    * Storytelling/creative content
+    * User preferences (non-mental-health)
+  - Audit log records deletion event (but not deleted content)
+  - User shown confirmation: "X conversations deleted, Y MB freed"
 ```
 
 ### Crisis Detection
@@ -313,31 +378,35 @@ REQUIREMENT: Detect crisis situations while maintaining privacy
 IMPLEMENTATION:
   - Local pattern matching (no cloud AI)
   - User-controlled crisis settings
-  - Encrypted crisis logs
+  - Encrypted crisis logs (HIGHEST security level)
   - Local emergency resources only
   - No automatic reporting to third parties
+  - If observer mode enabled: AI can provide supportive check-ins
+  - Crisis history deleted with mental health data button
 ```
 
 ### Therapeutic Context
 ```
 REQUIREMENT: Maintain therapeutic conversation history securely
 IMPLEMENTATION:
-  - Encrypted long-term memory
+  - Encrypted long-term memory (HIGHEST security level)
   - Secure session notes
   - User-controlled memory retention
   - Export capability (encrypted)
-  - Complete deletion capability
+  - Complete deletion capability (single button)
+  - Separate from creative/storytelling memories
 ```
 
 ### Medication/Treatment Tracking
 ```
 REQUIREMENT: If added, must be highly secured
 IMPLEMENTATION:
-  - Encrypted medication logs
+  - Encrypted medication logs (HIGHEST security level)
   - No sharing with pharmacies/providers
   - User-only access
   - Secure reminders (no cloud)
   - Audit trail for access
+  - Deleted with mental health data button
 ```
 
 ---
@@ -350,25 +419,44 @@ Priority: HIGH
 Timeline: Next 2-4 weeks
 
 Tasks:
-  1. Implement encrypted storage for conversations
+  1. Implement two-tier encrypted storage
+     - HIGHEST: Mental health conversations (separate keys)
+       * Emotional support agent chats
+       * Project Three AI relationship chats
+       * Mental health observations
+     - STANDARD: General conversations
      - Use SQLCipher for SQLite encryption
      - AES-256-GCM for file encryption
      - Argon2id for key derivation
+     - Crypto shredding capability (destroy keys on delete)
   
   2. Add encrypted RAG/memory storage
+     - Separate mental health memory from general memory
      - Encrypt vector embeddings
      - Encrypt metadata
      - Secure ChromaDB/Qdrant setup
+     - Support selective deletion (mental health only)
   
-  3. Create audit logging system
+  3. Implement observer mode infrastructure
+     - User consent system (opt-in)
+     - UI indicators for active observation
+     - Cross-agent context sharing (encrypted)
+     - Audit logging for observer access
+     - Linked deletion with mental health data
+  
+  4. Create audit logging system
      - Immutable log structure
      - Encrypted audit logs
      - User-accessible audit viewer
+     - Log observer mode state changes
+     - Log data deletion events (not content)
   
-  4. Implement secure user profiles
+  5. Implement secure user profiles
      - Encrypted user database
      - Secure password hashing
      - Session management
+     - Mental health data deletion button
+     - Confirmation dialogs for destructive actions
 ```
 
 ### Phase 3: Advanced Security
@@ -397,6 +485,158 @@ Tasks:
   4. Third-party security audit
   5. Penetration testing
   6. Compliance certification (if needed)
+```
+
+---
+
+## Data Architecture & Separation
+
+### Database Schema Design
+
+```
+MENTAL_HEALTH_DB (Separate SQLCipher instance, separate key):
+  ┌─────────────────────────────────────────────────────────────┐
+  │ emotional_support_conversations                             │
+  │  - conversation_id (PK)                                     │
+  │  - user_id                                                  │
+  │  - encrypted_content (AES-256-GCM)                         │
+  │  - timestamp                                                │
+  │  - emotion_detected (encrypted)                            │
+  │  - crisis_flag (encrypted)                                 │
+  ├─────────────────────────────────────────────────────────────┤
+  │ project3_ai_observations                                    │
+  │  - observation_id (PK)                                      │
+  │  - user_id                                                  │
+  │  - encrypted_context (AES-256-GCM)                         │
+  │  - source_conversation_id (FK)                             │
+  │  - timestamp                                                │
+  │  - observer_mode_enabled (encrypted)                       │
+  ├─────────────────────────────────────────────────────────────┤
+  │ mental_health_memory                                        │
+  │  - memory_id (PK)                                           │
+  │  - user_id                                                  │
+  │  - encrypted_embedding (vector, encrypted)                 │
+  │  - encrypted_metadata (AES-256-GCM)                        │
+  │  - timestamp                                                │
+  ├─────────────────────────────────────────────────────────────┤
+  │ crisis_detection_logs                                       │
+  │  - log_id (PK)                                              │
+  │  - user_id                                                  │
+  │  - encrypted_indicators (AES-256-GCM)                      │
+  │  - severity_level (encrypted)                              │
+  │  - timestamp                                                │
+  │  - action_taken (encrypted)                                │
+  └─────────────────────────────────────────────────────────────┘
+
+GENERAL_DB (Standard SQLCipher, different key):
+  ┌─────────────────────────────────────────────────────────────┐
+  │ general_conversations                                       │
+  │  - conversation_id (PK)                                     │
+  │  - user_id                                                  │
+  │  - agent_type (narrator, character, director)              │
+  │  - encrypted_content (AES-256-GCM)                         │
+  │  - timestamp                                                │
+  ├─────────────────────────────────────────────────────────────┤
+  │ project3_general_interactions                               │
+  │  - interaction_id (PK)                                      │
+  │  - user_id                                                  │
+  │  - encrypted_content (AES-256-GCM)                         │
+  │  - timestamp                                                │
+  │  - mental_health_context (BOOLEAN, false for non-MH)       │
+  ├─────────────────────────────────────────────────────────────┤
+  │ creative_memory                                             │
+  │  - memory_id (PK)                                           │
+  │  - user_id                                                  │
+  │  - encrypted_embedding (vector, encrypted)                 │
+  │  - encrypted_metadata (AES-256-GCM)                        │
+  │  - content_type (storytelling, creative, etc.)             │
+  │  - timestamp                                                │
+  └─────────────────────────────────────────────────────────────┘
+```
+
+### Key Management
+
+```
+USER_MASTER_KEY (Derived from user password with Argon2id)
+   ├── MENTAL_HEALTH_KEY (Separate derivation path)
+   │    └── Used ONLY for mental_health_db
+   │    └── Destroying this key = crypto shredding all MH data
+   │
+   └── GENERAL_KEY (Different derivation path)
+        └── Used for general_db
+        └── Preserved when MH data deleted
+```
+
+### Deletion Flow
+
+```
+User clicks "Delete Mental Health Data" button
+   ↓
+Show confirmation dialog:
+  "This will permanently delete:
+   • All emotional support conversations
+   • All mental health observations by Project Three AI
+   • All mood/emotion logs
+   • All crisis detection history
+   • All mental health reminders
+   
+   Your general conversations and creative content will NOT be deleted.
+   
+   This cannot be undone. Continue?"
+   
+   [Cancel] [Delete Mental Health Data]
+   ↓
+User confirms deletion
+   ↓
+1. Destroy MENTAL_HEALTH_KEY (crypto shredding)
+2. Drop mental_health_db (or all tables within it)
+3. Purge mental health embeddings from vector DB
+4. Clear observer mode settings
+5. Log deletion event in audit log (timestamp, user_id, success)
+6. Show success message: "Mental health data deleted. X conversations removed."
+   ↓
+Complete - Data irrecoverable even with full disk forensics
+```
+
+### Observer Mode Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     USER INTERFACE                          │
+│  [Toggle: Allow Project Three AI to observe sessions]      │
+│  Status: ● Active - AI is listening and learning           │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│             EMOTIONAL SUPPORT SESSION                       │
+│  User: "I've been feeling really anxious lately..."        │
+│  Agent: "I understand. Let's talk about what's been..."    │
+│                                                             │
+│  [Observer Mode Active - Project Three AI observing]       │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+              Observer mode enabled?
+                    ↓ YES
+┌─────────────────────────────────────────────────────────────┐
+│         PROJECT THREE AI CONTEXT BUILDER                    │
+│  - Extract: User is experiencing anxiety                   │
+│  - Extract: Triggers mentioned: work stress, sleep         │
+│  - Store: Mental health context (encrypted, MH_KEY)        │
+│  - Enable: Supportive behavior in general interactions     │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│      LATER: PROJECT THREE AI GENERAL INTERACTION            │
+│  User: "What should I work on today?"                       │
+│  AI: [Has MH context: user stressed about work]            │
+│  AI: "Before diving into work, have you taken any breaks   │
+│       today? I know things have been demanding lately."    │
+│                                                             │
+│  [Context from mental health observation used supportively]│
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+       All observer data encrypted with MENTAL_HEALTH_KEY
+       Deleted atomically when user deletes MH data
 ```
 
 ---
@@ -441,13 +681,41 @@ For every pull request/feature:
 
 ## Encryption Standards
 
+### Security Levels
+
+```
+HIGHEST SECURITY (Mental Health PHI):
+  - AES-256-GCM with separate encryption keys
+  - Separate database or table with SQLCipher
+  - Separate key derivation (allows crypto shredding)
+  - Double encryption: database + file level
+  - Memory locked (cannot be swapped to disk)
+  - Used for:
+    * Emotional support conversations
+    * Project Three AI relationship conversations
+    * Mental health observations/context
+    * Crisis detection logs
+    * Medication tracking (if added)
+
+STANDARD SECURITY (General PHI):
+  - AES-256-GCM
+  - SQLCipher (AES-256)
+  - Standard key derivation
+  - Used for:
+    * General conversations
+    * User preferences
+    * Non-therapeutic AI interactions
+    * Creative/storytelling content
+```
+
 ### Required Algorithms
 ```
-File Encryption:    AES-256-GCM
+File Encryption:    AES-256-GCM (double-layer for mental health)
 Database:           SQLCipher (AES-256)
 Key Derivation:     Argon2id (OWASP params)
 Hashing:            SHA-256 (integrity), Argon2id (passwords)
 Key Storage:        OS Keychain/Credential Manager
+Key Separation:     Separate keys for mental health data (crypto shredding)
 ```
 
 ### Key Management
