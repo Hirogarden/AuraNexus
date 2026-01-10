@@ -128,6 +128,57 @@ IMPLEMENTATION:
   - Penetration testing (future)
 ```
 
+#### Informed Consent & User Education (§164.308(a))
+```
+REQUIREMENT: Users must understand service nature, limitations, and rights
+STATUS: Phase 2 Implementation
+IMPLEMENTATION:
+  
+  PEER SPECIALIST DISCLOSURE:
+    - Clear disclosure that support is provided by a Peer Specialist
+    - Definition: "A mental health patient who has reached a point in their 
+      recovery where they work to help others"
+    - Distinction from licensed therapy/counseling
+    - Credentials and limitations clearly stated
+    - Displayed prominently on first launch and in settings
+  
+  TERMS OF SERVICE WITH COMPREHENSION CHECK:
+    - Users must read ToS before accessing mental health features
+    - Coping skills scattered throughout ToS at relevant sections:
+      * Grounding techniques (when discussing crisis features)
+      * Breathing exercises (when discussing emotional support)
+      * Journaling benefits (when discussing conversation history)
+      * Self-care reminders (when discussing AI observations)
+      * Resource seeking (when discussing limitations)
+    - Comprehension verification question:
+      "During the terms of service, what was one coping skill discussed?"
+    - Accept any valid coping skill mentioned in ToS
+    - Cannot proceed without correct answer (prevents click-through)
+    - Re-acknowledgment required after significant ToS updates
+  
+  SAFETY EMPHASIS:
+    - "You are safe here" messaging throughout interface
+    - Clear emergency resources (crisis hotlines, 988, local services)
+    - When to seek professional help (suicidal ideation, severe symptoms)
+    - Limitations of peer support vs professional therapy
+    - Privacy and confidentiality guarantees
+    - Data control (you own your data, can delete anytime)
+  
+  EDUCATIONAL INTEGRATION:
+    - Coping skills woven into ToS naturally (not forced)
+    - Brief explanations of each skill in context
+    - Reinforcement during actual use (AI suggests skills when appropriate)
+    - Library of coping skills accessible in app
+    - Evidence-based techniques only
+  
+  CONSENT TRACKING:
+    - Log when ToS accepted (timestamp, version)
+    - Log comprehension question answered correctly
+    - Audit trail of consent acknowledgments
+    - Ability to review ToS anytime from settings
+    - Notification when ToS updated (re-consent required)
+```
+
 ---
 
 ## Architectural Principles (Non-Negotiable)
@@ -457,6 +508,15 @@ Tasks:
      - Session management
      - Mental health data deletion button
      - Confirmation dialogs for destructive actions
+  
+  6. Implement informed consent system
+     - Terms of Service with embedded coping skills
+     - Comprehension verification question system
+     - Peer Specialist disclosure (prominent display)
+     - Safety messaging and emergency resources
+     - Consent tracking and audit trail
+     - ToS versioning and re-consent on updates
+     - Coping skills library integration
 ```
 
 ### Phase 3: Advanced Security
