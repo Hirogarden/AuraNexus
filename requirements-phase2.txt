@@ -1,0 +1,35 @@
+# Phase 2 Dependencies - Install when starting Phase 2 implementation
+# These packages will be needed for encryption, audit logging, and observer mode
+
+# Encryption & Security
+sqlcipher3-binary>=0.5.0  # SQLCipher for encrypted databases (AES-256)
+cryptography>=41.0.0      # AES-256-GCM file encryption
+argon2-cffi>=23.1.0       # Argon2id for key derivation (OWASP recommended)
+
+# Database
+sqlalchemy>=2.0.0         # ORM for database management
+alembic>=1.12.0          # Database migrations
+
+# Audit Logging
+python-json-logger>=2.0.0  # Structured logging for audit trails
+
+# Memory/RAG (if not already installed)
+# chromadb>=0.4.0         # Already in main requirements.txt
+# sentence-transformers   # Already in main requirements.txt
+
+# Testing & Validation
+pytest-asyncio>=0.21.0    # Async testing support
+pytest-cov>=4.1.0        # Coverage testing for security validation
+
+# Optional: Enhanced security
+pycryptodome>=3.19.0     # Additional crypto utilities (if needed)
+keyring>=24.0.0          # OS keychain integration for key storage
+
+# Development Tools
+black>=23.0.0            # Code formatting
+pylint>=3.0.0            # Linting for security checks
+bandit>=1.7.5            # Security vulnerability scanner
+safety>=2.3.0            # Dependency security checker
+
+# Note: Install all at once when starting Phase 2:
+# pip install -r requirements-phase2.txt

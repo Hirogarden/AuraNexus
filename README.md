@@ -4,6 +4,17 @@ AuraNexus is a **HIPAA-compliant mental health support platform** with AI intera
 
 > **⚠️ Security First:** This application is designed to handle Protected Health Information (PHI) for mental health support. All data stays on your device, encrypted at rest, with no external network calls for sensitive data. See [HIPAA_COMPLIANCE.md](./HIPAA_COMPLIANCE.md) for full details.
 
+## 📚 For Developers: HIPAA Compliance Documentation
+
+**NEW TO THE PROJECT? START HERE:**
+1. 📖 [COMPLIANCE_DOCS_INDEX.md](./COMPLIANCE_DOCS_INDEX.md) - Master guide to all documentation
+2. ⚖️ [HIPAA_COMPLIANCE.md](./HIPAA_COMPLIANCE.md) - Core security framework (MUST READ before coding)
+3. ✅ [SECURITY_CHECKLIST.md](./SECURITY_CHECKLIST.md) - Complete for EVERY feature (no exceptions)
+4. 📋 [HIPAA_QUICK_REFERENCE.md](./HIPAA_QUICK_REFERENCE.md) - Daily reference (keep open while coding)
+5. 🔄 [DEVELOPMENT_WORKFLOW.md](./DEVELOPMENT_WORKFLOW.md) - Step-by-step secure development process
+
+**LATEST SESSION:** [SESSION_SUMMARY_2026-01-10.md](./SESSION_SUMMARY_2026-01-10.md) - Complete summary of Phase 1 & 2 design
+
 ## 🔒 Security Features
 
 - **In-Process LLM:** All AI inference runs locally within the application (no external API calls)
