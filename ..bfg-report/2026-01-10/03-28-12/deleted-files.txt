@@ -1,0 +1,1 @@
+3846b73ac33be458d7c1ec25baef3b5ebdab78ff 4245808416 Llama-3.1-8B-Lexi-Uncensored-V2-Q8_0.gguf
