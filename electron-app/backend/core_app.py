@@ -25,6 +25,12 @@ from typing import Optional, List
 from datetime import datetime
 from agent_manager_async import AsyncAgentManager
 import llm_manager
+from memory_manager import get_memory_manager
+from hierarchical_memory import (
+    get_session_manager,
+    ProjectType,
+    MemoryLayer
+)
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -193,6 +199,297 @@ async def unload_model_endpoint():
     """Unload current model"""
     llm_manager.unload_model()
     return {"status": "unloaded"}
+
+# ===== Memory Management Endpoints =====
+
+@app.get("/memory/stats")
+async def get_memory_stats():
+    """Get memory system statistics"""
+    try:
+        memory = get_memory_manager()
+        return memory.get_stats()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/memory/recent")
+async def get_recent_memory(n: int = 10):
+    """Get recent conversation history"""
+    try:
+        memory = get_memory_manager()
+        return {
+            "messages": memory.get_recent_history(n),
+            "count": len(memory.conversation_history)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class MemoryQueryRequest(BaseModel):
+    query: str
+    n_results: int = 3
+
+@app.post("/memory/query")
+async def query_memory(request: MemoryQueryRequest):
+    """Query long-term memory for relevant context"""
+    try:
+        memory = get_memory_manager()
+        results = memory.query_long_term_memory(request.query, request.n_results)
+        return {"results": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class SaveConversationRequest(BaseModel):
+    filepath: str
+
+@app.post("/memory/save")
+async def save_conversation(request: SaveConversationRequest):
+    """Save conversation to file"""
+    try:
+        memory = get_memory_manager()
+        memory.save_conversation(request.filepath)
+        return {"status": "saved", "filepath": request.filepath}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class LoadConversationRequest(BaseModel):
+    filepath: str
+
+@app.post("/memory/load")
+async def load_conversation(request: LoadConversationRequest):
+    """Load conversation from file"""
+    try:
+        memory = get_memory_manager()
+        memory.load_conversation(request.filepath)
+        return {"status": "loaded", "filepath": request.filepath}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/memory/clear/short")
+async def clear_short_term_memory():
+    """Clear short-term conversation history"""
+    try:
+        memory = get_memory_manager()
+        memory.clear_short_term()
+        return {"status": "cleared", "type": "short_term"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/memory/clear/long")
+async def clear_long_term_memory():
+    """Clear long-term RAG memory"""
+    try:
+        memory = get_memory_manager()
+        memory.clear_long_term()
+        return {"status": "cleared", "type": "long_term"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ===== Hierarchical Memory Endpoints (Multi-Session) =====
+
+class CreateSessionRequest(BaseModel):
+    session_id: str
+    project_type: str  # "medical", "story", "chat", "assistant"
+    encryption_key: Optional[str] = None
+
+@app.post("/sessions/create")
+async def create_memory_session(request: CreateSessionRequest):
+    """Create new memory session (story, medical project, etc.)"""
+    try:
+        session_mgr = get_session_manager()
+        project_type = ProjectType(request.project_type)
+        
+        memory = session_mgr.create_session(
+            session_id=request.session_id,
+            project_type=project_type,
+            encryption_key=request.encryption_key
+        )
+        
+        return {
+            "status": "created",
+            "session_id": request.session_id,
+            "stats": memory.get_stats()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/sessions/list")
+async def list_sessions():
+    """List all memory sessions"""
+    try:
+        session_mgr = get_session_manager()
+        return {"sessions": session_mgr.list_sessions()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class SwitchSessionRequest(BaseModel):
+    session_id: str
+
+@app.post("/sessions/switch")
+async def switch_session(request: SwitchSessionRequest):
+    """Switch active session"""
+    try:
+        session_mgr = get_session_manager()
+        session_mgr.switch_session(request.session_id)
+        return {"status": "switched", "session_id": request.session_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/sessions/{session_id}/stats")
+async def get_session_stats(session_id: str):
+    """Get session statistics"""
+    try:
+        session_mgr = get_session_manager()
+        memory = session_mgr.get_session(session_id)
+        if not memory:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return memory.get_stats()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class CreateBookmarkRequest(BaseModel):
+    session_id: str
+    label: str
+    description: str
+    tags: Optional[List[str]] = []
+    importance: float = 0.5
+
+@app.post("/sessions/{session_id}/bookmark")
+async def create_bookmark(session_id: str, request: CreateBookmarkRequest):
+    """Create bookmark in session"""
+    try:
+        session_mgr = get_session_manager()
+        memory = session_mgr.get_session(session_id)
+        if not memory:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        bookmark_id = memory.create_bookmark(
+            label=request.label,
+            description=request.description,
+            tags=request.tags,
+            importance=request.importance
+        )
+        
+        return {
+            "status": "created",
+            "bookmark_id": bookmark_id
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/sessions/{session_id}/bookmarks")
+async def get_bookmarks(session_id: str):
+    """Get all bookmarks for session"""
+    try:
+        session_mgr = get_session_manager()
+        memory = session_mgr.get_session(session_id)
+        if not memory:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        return {
+            "bookmarks": [
+                {
+                    "id": bid,
+                    "label": bm.label,
+                    "description": bm.description,
+                    "timestamp": bm.timestamp,
+                    "tags": bm.tags,
+                    "importance": bm.importance,
+                    "layer": bm.layer.value
+                }
+                for bid, bm in memory.bookmarks.items()
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class QuerySessionRequest(BaseModel):
+    query: str
+    layers: Optional[List[str]] = None
+    n_results: int = 5
+
+@app.post("/sessions/{session_id}/query")
+async def query_session_memory(session_id: str, request: QuerySessionRequest):
+    """Query hierarchical memory in session"""
+    try:
+        session_mgr = get_session_manager()
+        memory = session_mgr.get_session(session_id)
+        if not memory:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        layers = None
+        if request.layers:
+            layers = [MemoryLayer(layer) for layer in request.layers]
+        
+        results = memory.query_memory(
+            query=request.query,
+            layers=layers,
+            n_results=request.n_results
+        )
+        
+        return {"results": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ===== Medical Data Management (HIPAA - Unified Deletion) =====
+
+@app.get("/medical/summary")
+async def get_medical_data_summary():
+    """Get summary of ALL medical data (peer + assistant) before deletion"""
+    try:
+        session_mgr = get_session_manager()
+        summary = session_mgr.get_medical_data_summary()
+        return summary
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class DeleteMedicalDataRequest(BaseModel):
+    confirmation: str  # Must be "DELETE_ALL_MEDICAL_DATA"
+
+@app.post("/medical/delete-all")
+async def delete_all_medical_data(request: DeleteMedicalDataRequest):
+    """
+    ⚠️ DANGER: Delete ALL medical data (peer support + medical assistant)
+    This includes:
+    - All Meta-Hiro peer support conversations
+    - All medical assistant conversations
+    - All encrypted medical ChromaDB data
+    
+    Requires confirmation string: "DELETE_ALL_MEDICAL_DATA"
+    General chat/story memories are NOT affected.
+    """
+    try:
+        # Require explicit confirmation
+        if request.confirmation != "DELETE_ALL_MEDICAL_DATA":
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid confirmation. Must be 'DELETE_ALL_MEDICAL_DATA'"
+            )
+        
+        session_mgr = get_session_manager()
+        result = session_mgr.delete_all_medical_data()
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/medical/sessions")
+async def list_medical_sessions():
+    """List all medical sessions (peer + assistant)"""
+    try:
+        session_mgr = get_session_manager()
+        all_sessions = session_mgr.list_sessions()
+        
+        # Filter to only medical sessions
+        medical_sessions = [
+            s for s in all_sessions 
+            if s.get("is_medical", False)
+        ]
+        
+        return {
+            "medical_sessions": medical_sessions,
+            "count": len(medical_sessions)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import sys

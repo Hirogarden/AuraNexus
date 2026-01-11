@@ -54,7 +54,19 @@ class AsyncAgent:
         self.resp_queue = resp_queue
         self.running = False
         
-        # Story context (memory)
+        # Memory (integrated with MemoryManager)
+        self.use_memory = config.get("use_memory", True)
+        self.memory_manager = None
+        if self.use_memory:
+            try:
+                from memory_manager import get_memory_manager
+                self.memory_manager = get_memory_manager()
+                logger.info(f"Agent {name} using memory system")
+            except Exception as e:
+                logger.warning(f"Agent {name} memory disabled: {e}")
+                self.use_memory = False
+        
+        # Legacy conversation history (fallback if memory disabled)
         self.conversation_history = []
         self.max_history = 20
         
@@ -108,14 +120,30 @@ class AsyncAgent:
     
     def add_to_history(self, message: str):
         """Add message to conversation history"""
-        self.conversation_history.append({
-            "content": message,
-            "timestamp": datetime.now().isoformat()
-        })
-        
-        # Trim old history
-        if len(self.conversation_history) > self.max_history:
-            self.conversation_history = self.conversation_history[-self.max_history:]
+        # Use MemoryManager if available
+        if self.use_memory and self.memory_manager:
+            # Parse role and content
+            if ": " in message:
+                role_part, content = message.split(": ", 1)
+                role = "user" if role_part == "User" else "assistant"
+            else:
+                role = "assistant"
+                content = message
+            
+            self.memory_manager.add_message(
+                role=role,
+                content=content,
+                metadata={"agent": self.name}
+            )
+        else:
+            # Fallback to legacy history
+            self.conversation_history.append({
+                "content": message,
+                "timestamp": datetime.now().isoformat()
+            })
+            
+            if len(self.conversation_history) > self.max_history:
+                self.conversation_history = self.conversation_history[-self.max_history:]
     
     async def generate_response(self, message: str) -> str:
         """
@@ -157,26 +185,39 @@ class AsyncAgent:
         """Generate narrator-style response"""
         # This is placeholder - integrate with KoboldCPP/LLM later
         return f"📖 As {message}, the story unfolds before you. The world feels alive with possibility."
-    
-    def _character_response(self, message: str) -> str:
-        """Generate character-style response"""
-        personality_prompts = {
-            "dynamic, reactive": "💬 *reacts immediately*",
-            "thoughtful, strategic": "🤔 *considers carefully*"
-        }
-        prefix = personality_prompts.get(self.personality, "💬")
-        return f"{prefix} {self.name}: {message}"
-    
-    def _director_response(self, message: str) -> str:
-        """Generate director/flow-control response"""
-        return f"🎬 Director: The scene shifts as {message}. What happens next?"
-    
-    async def call_llm(self, prompt: str) -> str:
-        """
-        Call LLM for response generation
+     with memory-augmented context
         Supports both in-process (secure) and API modes
         """
         # Build context from history
+        if self.use_memory and self.memory_manager:
+            # Get recent conversation from memory manager
+            recent_history = self.memory_manager.get_formatted_history(5)
+            
+            # Get relevant long-term memories (RAG)
+            long_term_context = self.memory_manager.get_augmented_context(
+                query=prompt,
+                n_results=2,
+                max_chars=300
+            )
+            
+            context = f"{long_term_context}\n\n{recent_history}" if long_term_context else recent_history
+        else:
+            # Fallback to legacy history
+            context = "\n".join([
+                h["content"] for h in self.conversation_history[-5:]
+            ])
+        
+        # Build role-specific system prompt
+        system_prompts = {
+            "narrator": f"You are a descriptive storyteller. Your personality: {self.personality}. Create vivid, immersive descriptions.",
+            "character": f"You are {self.name}, a character in the story. Your personality: {self.personality}. Stay in character and respond naturally.",
+            "director": f"You are the story director. Your role: {self.personality}. Guide the narrative flow and pacing."
+        }
+        
+        system_prompt = system_prompts.get(self.role, f"You are {self.name}.")
+        
+        full_prompt = f"""{system_prompt}
+ext from history
         context = "\n".join([
             h["content"] for h in self.conversation_history[-5:]
         ])
@@ -208,7 +249,7 @@ User: {prompt}
     async def _call_inprocess_llm(self, prompt: str) -> str:
         """
         Call in-process LLM (secure, no external dependencies)
-        Runs model directly in Python process
+        Runs model directly in Python process with role-optimized sampling
         """
         try:
             # Import LLM manager
@@ -218,21 +259,28 @@ User: {prompt}
             if str(backend_path) not in sys.path:
                 sys.path.insert(0, str(backend_path))
             
-            from llm_manager import generate, is_model_loaded
+            from llm_manager import generate, is_model_loaded, get_sampling_preset
             
             # Check if model is loaded
             if not is_model_loaded():
                 raise Exception("No model loaded. Call llm_manager.load_model() or auto_load_model() first")
             
-            # Generate in-process (runs in same Python process)
+            # Get role-specific sampling preset
+            if self.role == "narrator":
+                preset = get_sampling_preset("storytelling")
+            elif self.role == "character":
+                preset = get_sampling_preset("storytelling")
+            elif self.role == "director":
+                preset = get_sampling_preset("assistant")
+            else:
+                preset = get_sampling_preset("chat")
+            
+            # Generate in-process with advanced sampling
             generated = generate(
                 prompt=prompt,
                 max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                top_p=0.9,
-                top_k=40,
-                repeat_penalty=1.1,
-                stop=["\nUser:", "\n\n\n"]
+                stop=["\nUser:", "\n\n\n"],
+                **preset  # Unpack preset parameters
             )
             
             if not generated:

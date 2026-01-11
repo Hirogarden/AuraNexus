@@ -1,10 +1,10 @@
 ﻿"""
-Agent Manager - Spawns and manages agent processes
-Replaces Docker container orchestration with multiprocessing
+Agent Manager - Spawns and manages agent threads
+Replaces Docker container orchestration with threading
 """
 
-import multiprocessing as mp
-from multiprocessing import Queue, Process
+import threading
+from queue import Queue
 import time
 import logging
 from typing import Dict, Optional
@@ -13,19 +13,19 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 class AgentManager:
-    """Manages DND party agents as separate processes"""
+    """Manages DND party agents as separate threads"""
     
     def __init__(self):
-        self.agents: Dict[str, Process] = {}
+        self.agents: Dict[str, threading.Thread] = {}
         self.message_queues: Dict[str, Queue] = {}
         self.response_queue = Queue()
         
-        # Define party members
+        # Define storytelling agents (generic, user-customizable)
         self.agent_configs = {
-            "fighter": {"role": "fighter", "personality": "brave, direct"},
-            "wizard": {"role": "wizard", "personality": "wise, analytical"},
-            "cleric": {"role": "cleric", "personality": "caring, supportive"},
-            "dm": {"role": "dungeon_master", "personality": "narrative, fair"}
+            "character_1": {"role": "character", "name": "Character 1", "personality": "brave, action-oriented"},
+            "character_2": {"role": "character", "name": "Character 2", "personality": "wise, analytical"},
+            "character_3": {"role": "character", "name": "Character 3", "personality": "caring, supportive"},
+            "narrator": {"role": "narrator", "name": "Narrator", "personality": "descriptive, immersive"}
         }
     
     def start_all_agents(self):
@@ -35,35 +35,34 @@ class AgentManager:
         time.sleep(1)
     
     def start_agent(self, name: str, config: dict):
-        """Start a single agent process"""
+        """Start a single agent thread"""
         try:
             self.message_queues[name] = Queue()
             from agents.base_agent import Agent
-            process = Process(
+            thread = threading.Thread(
                 target=self._run_agent,
-                args=(name, config, self.message_queues[name], self.response_queue)
+                args=(name, config, self.message_queues[name], self.response_queue),
+                daemon=True
             )
-            process.start()
-            self.agents[name] = process
+            thread.start()
+            self.agents[name] = thread
             logger.info(f"Started agent: {name}")
         except Exception as e:
             logger.error(f"Failed to start agent {name}: {e}")
     
     def _run_agent(self, name: str, config: dict, msg_queue: Queue, resp_queue: Queue):
-        """Agent process main loop"""
+        """Agent thread main loop"""
         from agents.base_agent import Agent
         agent = Agent(name, config, msg_queue, resp_queue)
         agent.run()
     
     def stop_all_agents(self):
-        """Stop all agent processes"""
-        for name, process in self.agents.items():
+        """Stop all agent threads"""
+        for name, thread in self.agents.items():
             try:
                 if name in self.message_queues:
                     self.message_queues[name].put({"type": "stop"})
-                process.join(timeout=5)
-                if process.is_alive():
-                    process.terminate()
+                thread.join(timeout=5)
                 logger.info(f"Stopped agent: {name}")
             except Exception as e:
                 logger.error(f"Error stopping agent {name}: {e}")
@@ -73,10 +72,12 @@ class AgentManager:
         if name not in self.agent_configs:
             raise ValueError(f"Unknown agent: {name}")
         if name in self.agents:
-            process = self.agents[name]
-            if process.is_alive():
-                process.terminate()
-                process.join(timeout=2)
+            thread = self.agents[name]
+            if thread.is_alive():
+                # Signal thread to stop
+                if name in self.message_queues:
+                    self.message_queues[name].put({"type": "stop"})
+                thread.join(timeout=2)
         self.start_agent(name, self.agent_configs[name])
     
     async def process_message(self, message: str, target_agent: Optional[str] = None):
@@ -116,6 +117,6 @@ class AgentManager:
     def get_agent_status(self) -> dict:
         """Get status of all agents"""
         return {
-            name: "running" if process.is_alive() else "stopped"
-            for name, process in self.agents.items()
+            name: "running" if thread.is_alive() else "stopped"
+            for name, thread in self.agents.items()
         }
