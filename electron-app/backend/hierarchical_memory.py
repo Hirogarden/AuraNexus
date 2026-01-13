@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 try:
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     from cryptography.hazmat.primitives import hashes
-    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
     import secrets
     ENCRYPTION_AVAILABLE = True
 except ImportError:
@@ -94,7 +94,7 @@ class EncryptionManager:
         
         # Derive key from password using PBKDF2
         self.salt = secrets.token_bytes(16)
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=self.salt,

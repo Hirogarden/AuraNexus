@@ -185,7 +185,16 @@ class AsyncAgent:
         """Generate narrator-style response"""
         # This is placeholder - integrate with KoboldCPP/LLM later
         return f"📖 As {message}, the story unfolds before you. The world feels alive with possibility."
-     with memory-augmented context
+    
+    async def call_llm(self, message: str) -> str:
+        """
+        Call LLM with message (wrapper for generate_response_with_memory)
+        """
+        return await self.generate_response_with_memory(message)
+    
+    async def generate_response_with_memory(self, prompt: str) -> str:
+        """
+        Generate response with memory-augmented context
         Supports both in-process (secure) and API modes
         """
         # Build context from history
@@ -214,10 +223,7 @@ class AsyncAgent:
             "director": f"You are the story director. Your role: {self.personality}. Guide the narrative flow and pacing."
         }
         
-        system_prompt = system_prompts.get(self.role, f"You are {self.name}.")
-        
-        full_prompt = f"""{system_prompt}
-ext from history
+        # Build context from history
         context = "\n".join([
             h["content"] for h in self.conversation_history[-5:]
         ])
@@ -305,7 +311,7 @@ User: {prompt}
                 response = await client.post(
                     f"{KCPP_URL}/api/v1/generate",
                     json={
-                        "prompt": full_prompt,
+                        "prompt": prompt,
                         "max_length": self.max_tokens,
                         "temperature": self.temperature,
                         "top_p": 0.9,

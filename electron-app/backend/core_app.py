@@ -53,6 +53,9 @@ agent_manager = AsyncAgentManager()
 class ChatRequest(BaseModel):
     message: str
     target_agent: Optional[str] = None
+    session_id: Optional[str] = None
+    conversation_type: Optional[str] = None  # "peer_support", "medical_assistant", "story", "general"
+    encryption_key: Optional[str] = None
 
 class ChatResponse(BaseModel):
     agent: str
@@ -89,7 +92,7 @@ async def startup():
     
     # Start agents
     await agent_manager.start_all_agents()
-    logger.info("Backend ready - async agents running!")
+    logger.info("Backend ready - async agents running with hierarchical memory!")
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -112,11 +115,57 @@ async def root():
 async def chat(request: ChatRequest):
     """
     Send message to specific agent and get response
+    Uses hierarchical memory with automatic session management
     """
     try:
+        # Get or create session
+        session_mgr = get_session_manager()
+        
+        # Determine session ID and type
+        session_id = request.session_id or "default_chat"
+        conv_type = request.conversation_type or "general"
+        
+        # Map conversation type to ProjectType
+        type_mapping = {
+            "peer_support": ProjectType.MEDICAL_PEER,
+            "medical_assistant": ProjectType.MEDICAL_ASSISTANT,
+            "story": ProjectType.STORYTELLING,
+            "general": ProjectType.GENERAL_CHAT
+        }
+        project_type = type_mapping.get(conv_type, ProjectType.GENERAL_CHAT)
+        
+        # Get or create session
+        session = session_mgr.get_session(session_id)
+        if not session:
+            # Auto-create session
+            logger.info(f"Creating new session: {session_id} ({conv_type})")
+            session = session_mgr.create_session(
+                session_id=session_id,
+                project_type=project_type,
+                encryption_key=request.encryption_key
+            )
+        
+        # Add user message to memory
+        session.add_message(
+            content=request.message,
+            role="user",
+            metadata={"agent": request.target_agent or "user"}
+        )
+        
+        # Get agent response
         response_data = await agent_manager.send_message(
             message=request.message,
             target_agent=request.target_agent
+        )
+        
+        # Add agent response to memory
+        session.add_message(
+            content=response_data["response"],
+            role="assistant",
+            metadata={
+                "agent": response_data["agent"],
+                "role": response_data.get("role", "unknown")
+            }
         )
         
         return ChatResponse(
@@ -127,6 +176,8 @@ async def chat(request: ChatRequest):
         )
     except Exception as e:
         logger.error(f"Chat error: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/broadcast")
@@ -203,22 +254,37 @@ async def unload_model_endpoint():
 # ===== Memory Management Endpoints =====
 
 @app.get("/memory/stats")
-async def get_memory_stats():
-    """Get memory system statistics"""
+async def get_memory_stats(session_id: str = "default_chat"):
+    """Get memory system statistics for a session"""
     try:
-        memory = get_memory_manager()
-        return memory.get_stats()
+        session_mgr = get_session_manager()
+        session = session_mgr.get_session(session_id)
+        if not session:
+            return {
+                "error": "Session not found",
+                "session_id": session_id,
+                "available_sessions": [s["session_id"] for s in session_mgr.list_sessions()]
+            }
+        return session.get_stats()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/memory/recent")
-async def get_recent_memory(n: int = 10):
-    """Get recent conversation history"""
+async def get_recent_memory(session_id: str = "default_chat", n: int = 10):
+    """Get recent conversation history from active memory"""
     try:
-        memory = get_memory_manager()
+        session_mgr = get_session_manager()
+        session = session_mgr.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+        
+        # Get recent messages from active memory
+        messages = session.active_memory[-n:]
         return {
-            "messages": memory.get_recent_history(n),
-            "count": len(memory.conversation_history)
+            "session_id": session_id,
+            "messages": messages,
+            "count": len(messages),
+            "total_active": len(session.active_memory)
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -227,68 +293,67 @@ class MemoryQueryRequest(BaseModel):
     query: str
     n_results: int = 3
 
+class MemoryQueryRequestNew(BaseModel):
+    query: str
+    session_id: str = "default_chat"
+    n_results: int = 3
+    layers: Optional[List[str]] = None  # e.g., ["medium_term", "long_term"]
+
 @app.post("/memory/query")
-async def query_memory(request: MemoryQueryRequest):
-    """Query long-term memory for relevant context"""
+async def query_memory(request: MemoryQueryRequestNew):
+    """Query hierarchical memory for relevant context"""
     try:
-        memory = get_memory_manager()
-        results = memory.query_long_term_memory(request.query, request.n_results)
-        return {"results": results}
+        session_mgr = get_session_manager()
+        session = session_mgr.get_session(request.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session {request.session_id} not found")
+        
+        # Map string layer names to MemoryLayer enum
+        layers = None
+        if request.layers:
+            layer_map = {
+                "active": MemoryLayer.ACTIVE,
+                "short_term": MemoryLayer.SHORT_TERM,
+                "medium_term": MemoryLayer.MEDIUM_TERM,
+                "long_term": MemoryLayer.LONG_TERM,
+                "archived": MemoryLayer.ARCHIVED
+            }
+            layers = [layer_map[l] for l in request.layers if l in layer_map]
+        
+        results = session.query_memory(
+            query=request.query,
+            layers=layers,
+            n_results=request.n_results
+        )
+        return {
+            "session_id": request.session_id,
+            "results": results
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-class SaveConversationRequest(BaseModel):
-    filepath: str
-
-@app.post("/memory/save")
-async def save_conversation(request: SaveConversationRequest):
-    """Save conversation to file"""
-    try:
-        memory = get_memory_manager()
-        memory.save_conversation(request.filepath)
-        return {"status": "saved", "filepath": request.filepath}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-class LoadConversationRequest(BaseModel):
-    filepath: str
-
-@app.post("/memory/load")
-async def load_conversation(request: LoadConversationRequest):
-    """Load conversation from file"""
-    try:
-        memory = get_memory_manager()
-        memory.load_conversation(request.filepath)
-        return {"status": "loaded", "filepath": request.filepath}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/memory/clear/short")
-async def clear_short_term_memory():
-    """Clear short-term conversation history"""
-    try:
-        memory = get_memory_manager()
-        memory.clear_short_term()
-        return {"status": "cleared", "type": "short_term"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/memory/clear/long")
-async def clear_long_term_memory():
-    """Clear long-term RAG memory"""
-    try:
-        memory = get_memory_manager()
-        memory.clear_long_term()
-        return {"status": "cleared", "type": "long_term"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ===== Hierarchical Memory Endpoints (Multi-Session) =====
 
 class CreateSessionRequest(BaseModel):
     session_id: str
-    project_type: str  # "medical", "story", "chat", "assistant"
+    project_type: str  # "medical_peer", "medical_assistant", "story", "general_chat"
     encryption_key: Optional[str] = None
+
+@app.get("/memory/context")
+async def get_memory_context(session_id: str = "default_chat", n: int = 10):
+    """Get formatted recent context for LLM prompts"""
+    try:
+        session_mgr = get_session_manager()
+        session = session_mgr.get_session(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+        
+        context = session.get_recent_context(n)
+        return {
+            "session_id": session_id,
+            "context": context,
+            "message_count": n
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/sessions/create")
 async def create_memory_session(request: CreateSessionRequest):
