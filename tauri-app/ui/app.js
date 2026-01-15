@@ -3,7 +3,7 @@ let invoke = null;
 
 // Global state
 let currentMode = 'chatbot';
-let isBackendOnline = false;
+let isBackendOnline = true;
 
 // Separate message history for each mode (like Discord channels)
 let modeMessages = {
@@ -54,7 +54,7 @@ const MODE_CONFIG = {
         info: 'AI Chatbot: Natural conversations with context awareness',
         defaultAgent: 'narrator',
         showAgentSelector: false,
-        systemPrompt: 'You are Aura, a friendly and helpful AI companion. Have natural conversations, be empathetic, and provide thoughtful responses. Keep answers conversational and engaging.',
+        systemPrompt: 'You are Aura, a friendly and helpful AI companion. Have natural conversations, be empathetic, and provide thoughtful responses. Keep answers conversational and engaging. Do NOT write in narrative or storytelling style. Do NOT describe scenes or actions. Just chat naturally like a helpful friend.',
         conversationType: 'general'
     },
     storyteller: {
@@ -88,10 +88,14 @@ window.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        checkBackendStatus();
-        
-        // Check backend every 5 seconds
-        setInterval(checkBackendStatus, 5000);
+        // Initialize status indicator as online
+        const indicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        const sendBtn = document.getElementById('sendBtn');
+        indicator.className = 'status-indicator online';
+        statusText.textContent = 'Ready';
+        sendBtn.disabled = false;
+        console.log('✅ Native Rust backend ready');
     }, 100);
     
     // Temperature slider
@@ -115,40 +119,8 @@ window.addEventListener('DOMContentLoaded', () => {
     applySamplingPreset();
 });
 
-// Check if backend is online
-async function checkBackendStatus() {
-    try {
-        console.log('Checking backend status...');
-        const online = await invoke('check_backend');
-        console.log('Backend status result:', online);
-        isBackendOnline = online;
-        
-        const indicator = document.getElementById('statusIndicator');
-        const statusText = document.getElementById('statusText');
-        const sendBtn = document.getElementById('sendBtn');
-        
-        if (online) {
-            indicator.className = 'status-indicator online';
-            statusText.textContent = 'Backend Online';
-            sendBtn.disabled = false;
-            console.log('✅ Backend is ONLINE');
-        } else {
-            indicator.className = 'status-indicator offline';
-            statusText.textContent = 'Backend Offline';
-            sendBtn.disabled = true;
-            console.log('❌ Backend is OFFLINE');
-        }
-    } catch (error) {
-        console.error('❌ Status check FAILED:', error);
-        isBackendOnline = false;
-        const indicator = document.getElementById('statusIndicator');
-        const statusText = document.getElementById('statusText');
-        const sendBtn = document.getElementById('sendBtn');
-        indicator.className = 'status-indicator offline';
-        statusText.textContent = 'Connection Error';
-        sendBtn.disabled = true;
-    }
-}
+// Native Rust backend is always available
+// No need for health checks - Tauri commands work directly
 
 // Switch modes
 function switchMode(mode) {
@@ -207,16 +179,23 @@ function createMessageElement(text, type, sender) {
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${type}`;
     
-    const senderSpan = document.createElement('div');
-    senderSpan.className = 'message-sender';
-    senderSpan.textContent = sender;
-    
-    const textSpan = document.createElement('div');
-    textSpan.className = 'message-text';
-    textSpan.textContent = text;
-    
-    msgDiv.appendChild(senderSpan);
-    msgDiv.appendChild(textSpan);
+    if (sender && type !== 'system' && type !== 'error') {
+        const senderSpan = document.createElement('div');
+        senderSpan.className = 'message-sender';
+        senderSpan.textContent = sender;
+        
+        const textSpan = document.createElement('div');
+        textSpan.className = 'message-text';
+        textSpan.textContent = text;
+        
+        msgDiv.appendChild(senderSpan);
+        msgDiv.appendChild(textSpan);
+    } else {
+        const textSpan = document.createElement('div');
+        textSpan.className = 'message-text';
+        textSpan.textContent = text;
+        msgDiv.appendChild(textSpan);
+    }
     
     return msgDiv;
 }
@@ -239,7 +218,7 @@ async function sendMessage() {
     const input = document.getElementById('messageInput');
     const message = input.value.trim();
     
-    if (!message || !isBackendOnline) return;
+    if (!message) return;
     if (!invoke) {
         console.error('❌ Invoke function not available');
         return;
@@ -291,20 +270,10 @@ async function sendMessage() {
 // Add message to UI
 function addMessage(text, type, sender) {
     const container = document.getElementById('messagesContainer');
-    const messageDiv = document.createElement('div');
-    const messageId = 'msg_' + Date.now();
+    const messageId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     
+    const messageDiv = createMessageElement(text, type, sender);
     messageDiv.id = messageId;
-    messageDiv.className = `message ${type}`;
-    
-    if (sender && type !== 'system' && type !== 'error') {
-        messageDiv.innerHTML = `
-            <div class="message-sender">${sender}</div>
-            <div class="message-text">${escapeHtml(text)}</div>
-        `;
-    } else {
-        messageDiv.innerHTML = `<div class="message-text">${escapeHtml(text)}</div>`;
-    }
     
     container.appendChild(messageDiv);
     container.scrollTop = container.scrollHeight;
