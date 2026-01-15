@@ -239,16 +239,7 @@ def generate(
             params["frequency_penalty"] = frequency_penalty
         if presence_penalty != 0.0:
             params["presence_penalty"] = presence_penalty
-        if dry_multiplier > 0.0:
-            params["dry_multiplier"] = dry_multiplier
-            params["dry_base"] = dry_base
-            params["dry_allowed_length"] = dry_allowed_length
-        if xtc_probability > 0.0:
-            params["xtc_probability"] = xtc_probability
-            params["xtc_threshold"] = xtc_threshold
-        if dynatemp_range > 0.0:
-            params["dynatemp_range"] = dynatemp_range
-            params["dynatemp_exponent"] = dynatemp_exponent
+        # Note: DRY, XTC, DynaTemp sampling removed - not supported by standard llama-cpp-python
         if mirostat_mode > 0:
             params["mirostat_mode"] = mirostat_mode
             params["mirostat_tau"] = mirostat_tau
@@ -431,24 +422,19 @@ def get_sampling_preset(preset_name: str) -> dict:
     """
     presets = {
         "chat": {
-            "temperature": 0.7,
-            "top_p": 0.95,
-            "top_k": 40,
-            "min_p": 0.05,
-            "dry_multiplier": 0.7,
-            "frequency_penalty": 0.2,
-            "presence_penalty": 0.1,
-            "repeat_penalty": 1.1
+            "temperature": 0.4,  # Lower for small models to reduce rambling
+            "top_p": 0.9,
+            "top_k": 30,
+            "min_p": 0.1,  # Higher min_p filters out weak tokens
+            "frequency_penalty": 0.3,
+            "presence_penalty": 0.2,
+            "repeat_penalty": 1.2  # Higher to prevent repetition
         },
         "storytelling": {
             "temperature": 0.9,
             "top_p": 0.95,
             "top_k": 50,
             "min_p": 0.05,
-            "dry_multiplier": 0.8,
-            "xtc_probability": 0.1,
-            "xtc_threshold": 0.1,
-            "dynatemp_range": 0.15,
             "repeat_penalty": 1.05
         },
         "creative": {
@@ -456,9 +442,6 @@ def get_sampling_preset(preset_name: str) -> dict:
             "top_p": 0.95,
             "top_k": 50,
             "min_p": 0.03,
-            "dry_multiplier": 0.9,
-            "xtc_probability": 0.15,
-            "dynatemp_range": 0.2,
             "repeat_penalty": 1.1
         },
         "assistant": {
@@ -467,7 +450,6 @@ def get_sampling_preset(preset_name: str) -> dict:
             "top_k": 40,
             "min_p": 0.1,
             "repeat_penalty": 1.1,
-            "dry_multiplier": 0.0,  # Off for precision
             "frequency_penalty": 0.1
         },
         "factual": {
@@ -475,8 +457,7 @@ def get_sampling_preset(preset_name: str) -> dict:
             "top_p": 0.9,
             "top_k": 30,
             "min_p": 0.15,
-            "repeat_penalty": 1.15,
-            "dry_multiplier": 0.0
+            "repeat_penalty": 1.15
         }
     }
     

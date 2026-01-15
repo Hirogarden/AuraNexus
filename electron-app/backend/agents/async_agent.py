@@ -228,10 +228,7 @@ class AsyncAgent:
             }
             system_prompt = system_prompts.get(self.role, f"You are {self.name}, a helpful assistant.")
         
-        # Build context from history
-        context = "\n".join([
-            h["content"] for h in self.conversation_history[-5:]
-        ])
+        # Context was already built above (lines 207-224), don't rebuild it
         
         full_prompt = f"""{system_prompt}
 
