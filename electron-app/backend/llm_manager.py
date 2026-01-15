@@ -282,13 +282,65 @@ def get_model_info() -> Dict:
     }
 
 
+def download_starter_model() -> Optional[str]:
+    """
+    Download a small starter model for out-of-box experience.
+    Uses Qwen2.5-0.5B-Instruct (Q4_K_M quantization, ~350MB)
+    
+    Returns:
+        Path to downloaded model, or None if download failed
+    """
+    try:
+        import urllib.request
+        from tqdm import tqdm
+        
+        # Small, capable model for trying out the app
+        model_url = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+        model_name = "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+        models_dir = Path("./models")
+        models_dir.mkdir(exist_ok=True)
+        model_path = models_dir / model_name
+        
+        if model_path.exists():
+            logger.info(f"Starter model already exists: {model_path}")
+            return str(model_path)
+        
+        logger.info("🚀 First-time setup: Downloading starter model (~350MB)...")
+        logger.info("This lets you try AuraNexus immediately!")
+        logger.info("You can upgrade to larger models later in Settings.")
+        
+        # Download with progress
+        class DownloadProgressBar(tqdm):
+            def update_to(self, b=1, bsize=1, tsize=None):
+                if tsize is not None:
+                    self.total = tsize
+                self.update(b * bsize - self.n)
+        
+        with DownloadProgressBar(unit='B', unit_scale=True, miniters=1) as t:
+            urllib.request.urlretrieve(
+                model_url,
+                model_path,
+                reporthook=t.update_to
+            )
+        
+        logger.info(f"✅ Starter model downloaded: {model_path}")
+        return str(model_path)
+        
+    except Exception as e:
+        logger.warning(f"Failed to download starter model: {e}")
+        logger.info("You can manually download a .gguf model to ./models/")
+        return None
+
+
 def auto_load_model() -> bool:
     """
-    Auto-load model from common locations
+    Auto-load model from common locations or download starter model.
     Searches for .gguf files in:
     - ./models/
     - ../models/
     - C:/Users/{user}/models/
+    
+    If no model found, downloads a small starter model automatically.
     """
     search_paths = [
         Path("./models"),
@@ -314,7 +366,14 @@ def auto_load_model() -> bool:
             # Load with auto-detected GPU settings
             return load_model(model_path)
     
-    logger.warning("No models found in common locations")
+    # No model found - try downloading starter model
+    logger.info("No models found - attempting to download starter model...")
+    starter_path = download_starter_model()
+    
+    if starter_path:
+        return load_model(starter_path)
+    
+    logger.warning("No models available")
     logger.info("Place .gguf model in ./models/ directory or specify path with load_model()")
     return False
 

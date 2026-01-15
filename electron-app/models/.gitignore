@@ -1,0 +1,7 @@
+# Ignore downloaded model files (too large for git)
+*.gguf
+*.bin
+*.safetensors
+
+# Keep the README
+!README.md

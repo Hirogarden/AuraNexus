@@ -59,7 +59,7 @@ class AsyncAgent:
         self.memory_manager = None
         if self.use_memory:
             try:
-                from memory_manager import get_memory_manager
+                from ..memory_manager import get_memory_manager
                 self.memory_manager = get_memory_manager()
                 logger.info(f"Agent {name} using memory system")
             except Exception as e:
@@ -265,24 +265,24 @@ User: {prompt}
             if str(backend_path) not in sys.path:
                 sys.path.insert(0, str(backend_path))
             
-            from llm_manager import generate, is_model_loaded, get_sampling_preset
+            from .. import llm_manager
             
             # Check if model is loaded
-            if not is_model_loaded():
+            if not llm_manager.is_model_loaded():
                 raise Exception("No model loaded. Call llm_manager.load_model() or auto_load_model() first")
             
             # Get role-specific sampling preset
             if self.role == "narrator":
-                preset = get_sampling_preset("storytelling")
+                preset = llm_manager.get_sampling_preset("storytelling")
             elif self.role == "character":
-                preset = get_sampling_preset("storytelling")
+                preset = llm_manager.get_sampling_preset("storytelling")
             elif self.role == "director":
-                preset = get_sampling_preset("assistant")
+                preset = llm_manager.get_sampling_preset("assistant")
             else:
-                preset = get_sampling_preset("chat")
+                preset = llm_manager.get_sampling_preset("chat")
             
             # Generate in-process with advanced sampling
-            generated = generate(
+            generated = llm_manager.generate(
                 prompt=prompt,
                 max_tokens=self.max_tokens,
                 stop=["\nUser:", "\n\n\n"],

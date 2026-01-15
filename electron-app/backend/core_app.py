@@ -23,10 +23,10 @@ import logging
 import os
 from typing import Optional, List
 from datetime import datetime
-from agent_manager_async import AsyncAgentManager
-import llm_manager
-from memory_manager import get_memory_manager
-from hierarchical_memory import (
+from .agent_manager_async import AsyncAgentManager
+from . import llm_manager
+from .memory_manager import get_memory_manager
+from .hierarchical_memory import (
     get_session_manager,
     ProjectType,
     MemoryLayer
@@ -77,10 +77,14 @@ async def startup():
         logger.info(f"Loading model: {model_path}")
         llm_manager.load_model(model_path)
     else:
-        logger.info("Attempting auto-load of model...")
+        logger.info("🔍 Searching for LLM model...")
+        logger.info("💡 First time? A small model (~350MB) will download automatically")
+        logger.info("   so you can try AuraNexus right away!")
+        
         if not llm_manager.auto_load_model():
-            logger.warning("No model loaded - agents will use fallback responses")
-            logger.info("To use LLM: Place .gguf model in ./models/ or set MODEL_PATH environment variable")
+            logger.warning("No model available - agents will use fallback responses")
+            logger.info("💡 Download failed? Manually place a .gguf model in ./models/")
+            logger.info("   See electron-app/models/README.md for recommendations")
     
     # Show model info
     model_info = llm_manager.get_model_info()

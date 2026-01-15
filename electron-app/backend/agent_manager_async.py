@@ -82,7 +82,7 @@ class AsyncAgentManager:
             self.message_queues[name] = asyncio.Queue()
             
             # Import here to avoid circular imports
-            from agents.async_agent import AsyncAgent
+            from .agents.async_agent import AsyncAgent
             
             agent = AsyncAgent(
                 name=name,
