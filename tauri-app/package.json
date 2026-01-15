@@ -1,0 +1,14 @@
+{
+  "name": "auranexus-tauri",
+  "version": "1.0.0",
+  "description": "AuraNexus - Multi-Agent AI Companion (Tauri)",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.5.0"
+  }
+}

@@ -85,30 +85,66 @@
       const message = input.value.trim();
       if (!message) return;
 
-      addMessage('You', message);
+      addMessage('You', message, 'user');
       input.value = '';
+
+      // Show loading
+      addMessage('AI', 'Thinking...', 'loading');
 
       // Call Python backend
       try {
-        const response = await fetch('http://localhost:8000/chat', {
+        const response = await fetch('http://127.0.0.1:8000/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message })
+          body: JSON.stringify({ 
+            message: message,
+            target_agent: 'narrator'
+          })
         });
+        
+        if (!response.ok) {
+          throw new Error('Backend returned ' + response.status);
+        }
+        
         const data = await response.json();
-        addMessage(data.agent, data.response);
+        
+        // Remove loading message
+        removeLoadingMessages();
+        
+        // Add AI response
+        addMessage(data.agent || 'AI', data.response, 'agent');
       } catch (error) {
-        addMessage('System', 'Backend not ready yet...');
+        removeLoadingMessages();
+        addMessage('System', '❌ Backend not ready. Make sure server is running on port 8000', 'error');
       }
     }
 
-    function addMessage(sender, text) {
+    function addMessage(sender, text, type = 'user') {
       const messagesDiv = document.getElementById('messages');
       const messageDiv = document.createElement('div');
       messageDiv.className = 'message';
+      
+      // Style based on type
+      if (type === 'user') {
+        messageDiv.style.background = 'rgba(74, 144, 226, 0.3)';
+      } else if (type === 'agent') {
+        messageDiv.style.background = 'rgba(255, 255, 255, 0.2)';
+      } else if (type === 'loading') {
+        messageDiv.className = 'message loading';
+        messageDiv.style.background = 'rgba(255, 255, 255, 0.1)';
+        messageDiv.style.fontStyle = 'italic';
+      } else if (type === 'error') {
+        messageDiv.style.background = 'rgba(255, 100, 100, 0.3)';
+      }
+      
       messageDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
       messagesDiv.appendChild(messageDiv);
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+    
+    function removeLoadingMessages() {
+      const loadingMessages = document.querySelectorAll('.message.loading');
+      loadingMessages.forEach(msg => msg.remove());
     }
 
     document.getElementById('userInput').addEventListener('keypress', (e) => {

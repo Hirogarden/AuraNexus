@@ -41,7 +41,7 @@ def load_model(
     n_ctx: int = 4096,
     n_gpu_layers: int = None,  # None = auto-detect based on VRAM
     n_threads: Optional[int] = None,
-    n_batch: int = None,  # None = auto-detect based on VRAM
+    n_batch: int = 512,  # Default batch size
     verbose: bool = False
 ) -> bool:
     """
@@ -93,8 +93,10 @@ def load_model(
         
         # Auto-adjust batch size for low VRAM
         if n_gpu_layers > 0 and n_gpu_layers < 20:
-            n_batch = min(n_batch, 256)  # Smaller batches for limited VRAM
+            n_batch = 256  # Smaller batches for limited VRAM
             logger.info(f"  Batch size adjusted to {n_batch} for VRAM optimization")
+        
+        logger.info(f"  Batch size: {n_batch}")
         
         # Load model into process memory
         _llm_instance = Llama(
