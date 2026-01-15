@@ -45,28 +45,39 @@ impl LlmManager {
     }
     
     fn find_model() -> Option<PathBuf> {
-        let models_dir = std::env::current_dir()
-            .ok()?
-            .parent()?
-            .parent()?
-            .join("models");
+        // Try multiple locations for models directory
+        let search_paths = vec![
+            // Development: from src-tauri, go up to workspace root
+            std::env::current_dir().ok()?.parent()?.parent()?.join("models"),
+            // Production: models next to exe
+            std::env::current_exe().ok()?.parent()?.join("models"),
+            // Alternative: models in workspace root (when running from tauri-app/src-tauri/target/release)
+            std::env::current_exe().ok()?.parent()?.parent()?.parent()?.parent()?.parent()?.join("models"),
+        ];
         
-        if !models_dir.exists() {
-            return None;
+        for models_dir in search_paths {
+            if !models_dir.exists() {
+                continue;
+            }
+            
+            // Look for .gguf files
+            if let Some(model_path) = std::fs::read_dir(&models_dir)
+                .ok()?
+                .filter_map(|entry| entry.ok())
+                .filter(|entry| {
+                    entry.path().extension()
+                        .and_then(|ext| ext.to_str())
+                        .map(|ext| ext.eq_ignore_ascii_case("gguf"))
+                        .unwrap_or(false)
+                })
+                .map(|entry| entry.path())
+                .next()
+            {
+                return Some(model_path);
+            }
         }
         
-        // Look for .gguf files
-        std::fs::read_dir(&models_dir)
-            .ok()?
-            .filter_map(|entry| entry.ok())
-            .filter(|entry| {
-                entry.path().extension()
-                    .and_then(|ext| ext.to_str())
-                    .map(|ext| ext.eq_ignore_ascii_case("gguf"))
-                    .unwrap_or(false)
-            })
-            .map(|entry| entry.path())
-            .next()
+        None
     }
     
     pub fn generate(&mut self, prompt: &str) -> Result<String> {

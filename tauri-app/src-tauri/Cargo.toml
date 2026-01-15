@@ -19,8 +19,9 @@ serde_json = "1.0"
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
-# LLM inference (native Rust with CUDA GPU support)
-llama-cpp-2 = { version = "0.1", features = ["cuda"] }
+# LLM inference (native Rust - CPU-only temporarily for testing)
+llama-cpp-2 = { version = "0.1", features = [] }
+# NOTE: CUDA disabled temporarily - change to features = ["cuda"] once CMake CUDA build is fixed
 
 # Vector database (embedded) - We'll implement embeddings separately
 # lancedb = "0.5"  # Temporarily disabled due to protobuf complexity
