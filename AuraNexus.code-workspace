@@ -10,5 +10,7 @@
 			"path": "../../Repos"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"powershell.cwd": "AuraNexus"
+	}
 }
