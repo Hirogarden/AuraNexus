@@ -10,6 +10,7 @@ struct ChatRequest {
     target_agent: Option<String>,
     session_id: Option<String>,
     conversation_type: Option<String>,
+    system_prompt: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -21,14 +22,15 @@ struct ChatResponse {
 
 // Send message to Python backend
 #[tauri::command]
-async fn send_chat_message(message: String, agent: Option<String>) -> Result<ChatResponse, String> {
+async fn send_chat_message(message: String, agent: Option<String>, conversation_type: Option<String>, system_prompt: Option<String>) -> Result<ChatResponse, String> {
     let client = reqwest::Client::new();
     
     let request = ChatRequest {
         message,
         target_agent: agent,
         session_id: None,
-        conversation_type: Some("general".to_string()),
+        conversation_type: conversation_type.or(Some("general".to_string())),
+        system_prompt,
     };
     
     match client
@@ -59,11 +61,19 @@ async fn check_backend() -> Result<bool, String> {
 }
 
 fn main() {
+    println!("Starting Tauri application...");
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             send_chat_message,
             check_backend
         ])
+        .setup(|app| {
+            println!("Tauri setup complete");
+            let window = app.get_window("main").unwrap();
+            println!("Window created: {:?}", window.label());
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+    println!("Tauri application closed.");
 }

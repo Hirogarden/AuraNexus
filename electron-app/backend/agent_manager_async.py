@@ -19,6 +19,7 @@ class AgentMessage:
     content: str
     timestamp: str
     sender: Optional[str] = None
+    metadata: Optional[dict] = None
 
 
 class AsyncAgentManager:
@@ -160,7 +161,7 @@ class AsyncAgentManager:
         await asyncio.sleep(0.5)  # Brief pause
         await self.start_agent(name, self.agent_configs[name])
     
-    async def send_message(self, message: str, target_agent: Optional[str] = None) -> dict:
+    async def send_message(self, message: str, target_agent: Optional[str] = None, system_prompt: Optional[str] = None) -> dict:
         """Send message to agent and wait for response"""
         if not self.running:
             return {
@@ -176,12 +177,13 @@ class AsyncAgentManager:
             if target_agent not in self.message_queues:
                 raise ValueError(f"Unknown agent: {target_agent}")
             
-            # Send message
+            # Send message with system prompt
             await self.message_queues[target_agent].put(
                 AgentMessage(
                     type="chat",
                     content=message,
-                    timestamp=datetime.now().isoformat()
+                    timestamp=datetime.now().isoformat(),
+                    metadata={"system_prompt": system_prompt} if system_prompt else {}
                 )
             )
             

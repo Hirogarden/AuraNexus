@@ -181,6 +181,10 @@
         </div>
     </div>
     
+    <script>
+        console.log('Before app.js - __TAURI__:', typeof window.__TAURI__);
+        console.log('Before app.js - window keys:', Object.keys(window).filter(k => k.includes('TAURI') || k.includes('tauri')));
+    </script>
     <script src="app.js"></script>
 </body>
 </html>

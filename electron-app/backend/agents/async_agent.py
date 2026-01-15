@@ -93,8 +93,11 @@ class AsyncAgent:
                     break
                 
                 elif msg.type == "chat":
+                    # Extract system_prompt from metadata if provided
+                    system_prompt = msg.metadata.get("system_prompt") if hasattr(msg, 'metadata') and msg.metadata else None
+                    
                     # Generate response
-                    response = await self.generate_response(msg.content)
+                    response = await self.generate_response(msg.content, system_prompt=system_prompt)
                     
                     # Send response
                     await self.resp_queue.put({
@@ -145,7 +148,7 @@ class AsyncAgent:
             if len(self.conversation_history) > self.max_history:
                 self.conversation_history = self.conversation_history[-self.max_history:]
     
-    async def generate_response(self, message: str) -> str:
+    async def generate_response(self, message: str, system_prompt: Optional[str] = None) -> str:
         """
         Generate response to user message
         Uses LLM if available, falls back to rule-based
@@ -156,7 +159,7 @@ class AsyncAgent:
         # Try LLM first if enabled
         if self.use_llm:
             try:
-                response = await self.call_llm(message)
+                response = await self.call_llm(message, system_prompt=system_prompt)
                 if response and response != "[LLM response for: " + message + "]":
                     self.add_to_history(f"{self.name}: {response}")
                     return response
@@ -186,13 +189,13 @@ class AsyncAgent:
         # This is placeholder - integrate with KoboldCPP/LLM later
         return f"📖 As {message}, the story unfolds before you. The world feels alive with possibility."
     
-    async def call_llm(self, message: str) -> str:
+    async def call_llm(self, message: str, system_prompt: Optional[str] = None) -> str:
         """
         Call LLM with message (wrapper for generate_response_with_memory)
         """
-        return await self.generate_response_with_memory(message)
+        return await self.generate_response_with_memory(message, system_prompt=system_prompt)
     
-    async def generate_response_with_memory(self, prompt: str) -> str:
+    async def generate_response_with_memory(self, prompt: str, system_prompt: Optional[str] = None) -> str:
         """
         Generate response with memory-augmented context
         Supports both in-process (secure) and API modes
@@ -216,26 +219,19 @@ class AsyncAgent:
                 h["content"] for h in self.conversation_history[-5:]
             ])
         
-        # Build role-specific system prompt
-        system_prompts = {
-            "narrator": f"You are a descriptive storyteller. Your personality: {self.personality}. Create vivid, immersive descriptions.",
-            "character": f"You are {self.name}, a character in the story. Your personality: {self.personality}. Stay in character and respond naturally.",
-            "director": f"You are the story director. Your role: {self.personality}. Guide the narrative flow and pacing."
-        }
+        # Use custom system prompt or fallback to role-specific defaults
+        if not system_prompt:
+            system_prompts = {
+                "narrator": f"You are a descriptive storyteller. Your personality: {self.personality}. Create vivid, immersive descriptions.",
+                "character": f"You are {self.name}, a character in the story. Your personality: {self.personality}. Stay in character and respond naturally.",
+                "director": f"You are the story director. Your role: {self.personality}. Guide the narrative flow and pacing."
+            }
+            system_prompt = system_prompts.get(self.role, f"You are {self.name}, a helpful assistant.")
         
         # Build context from history
         context = "\n".join([
             h["content"] for h in self.conversation_history[-5:]
         ])
-        
-        # Build role-specific system prompt
-        system_prompts = {
-            "narrator": f"You are a descriptive storyteller. Your personality: {self.personality}. Create vivid, immersive descriptions.",
-            "character": f"You are {self.name}, a character in the story. Your personality: {self.personality}. Stay in character and respond naturally.",
-            "director": f"You are the story director. Your role: {self.personality}. Guide the narrative flow and pacing."
-        }
-        
-        system_prompt = system_prompts.get(self.role, f"You are {self.name}.")
         
         full_prompt = f"""{system_prompt}
 

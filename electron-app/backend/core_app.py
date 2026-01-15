@@ -56,6 +56,7 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     conversation_type: Optional[str] = None  # "peer_support", "medical_assistant", "story", "general"
     encryption_key: Optional[str] = None
+    system_prompt: Optional[str] = None
 
 class ChatResponse(BaseModel):
     agent: str
@@ -159,7 +160,8 @@ async def chat(request: ChatRequest):
         # Get agent response
         response_data = await agent_manager.send_message(
             message=request.message,
-            target_agent=request.target_agent
+            target_agent=request.target_agent,
+            system_prompt=request.system_prompt
         )
         
         # Add agent response to memory

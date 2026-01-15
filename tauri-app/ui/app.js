@@ -3,19 +3,47 @@ let invoke = null;
 
 // Global state
 let currentMode = 'chatbot';
-let messages = [];
 let isBackendOnline = false;
+
+// Separate message history for each mode (like Discord channels)
+let modeMessages = {
+    chatbot: [],
+    storyteller: [],
+    assistant: []
+};
 
 // Initialize Tauri API when available
 function initTauri() {
-    if (window.__TAURI__ && window.__TAURI__.tauri) {
-        invoke = window.__TAURI__.tauri.invoke;
+    console.log('Checking for Tauri API...');
+    
+    // Check for __TAURI_INVOKE__ which is the actual invoke function in Tauri 1.x
+    if (window.__TAURI_INVOKE__) {
+        invoke = window.__TAURI_INVOKE__;
+        console.log('✅ Found invoke at window.__TAURI_INVOKE__');
         console.log('✅ Tauri API loaded successfully');
         return true;
-    } else {
-        console.error('❌ Tauri API not available');
-        return false;
     }
+    
+    // Fallback checks
+    if (window.__TAURI__) {
+        if (window.__TAURI__.invoke) {
+            invoke = window.__TAURI__.invoke;
+            console.log('✅ Found invoke at window.__TAURI__.invoke');
+            return true;
+        } else if (window.__TAURI__.tauri && window.__TAURI__.tauri.invoke) {
+            invoke = window.__TAURI__.tauri.invoke;
+            console.log('✅ Found invoke at window.__TAURI__.tauri.invoke');
+            return true;
+        } else if (window.__TAURI__.core && window.__TAURI__.core.invoke) {
+            invoke = window.__TAURI__.core.invoke;
+            console.log('✅ Found invoke at window.__TAURI__.core.invoke');
+            return true;
+        }
+    }
+    
+    console.error('❌ Tauri API not available');
+    console.log('Available Tauri keys:', Object.keys(window).filter(k => k.includes('TAURI')));
+    return false;
 }
 
 // Mode configurations (matching Python app)
@@ -23,17 +51,29 @@ const MODE_CONFIG = {
     chatbot: {
         title: '💬 AI Chatbot',
         description: 'Have natural conversations with AI',
-        info: 'AI Chatbot: Natural conversations with context awareness'
+        info: 'AI Chatbot: Natural conversations with context awareness',
+        defaultAgent: 'narrator',
+        showAgentSelector: false,
+        systemPrompt: 'You are Aura, a friendly and helpful AI companion. Have natural conversations, be empathetic, and provide thoughtful responses. Keep answers conversational and engaging.',
+        conversationType: 'general'
     },
     storyteller: {
         title: '📖 Storyteller',
         description: 'Create immersive stories and adventures',
-        info: 'Storyteller: Generate creative narratives and interactive stories'
+        info: 'Storyteller: Generate creative narratives and interactive stories',
+        defaultAgent: 'narrator',
+        showAgentSelector: true,
+        systemPrompt: 'You are a creative storyteller. Help create immersive narratives, describe scenes vividly, and guide interactive story experiences.',
+        conversationType: 'storytelling'
     },
     assistant: {
         title: '🤝 AI Assistant',
         description: 'Get help with tasks and information',
-        info: 'AI Assistant: Helpful task completion with information retention'
+        info: 'AI Assistant: Helpful task completion with information retention',
+        defaultAgent: 'narrator',
+        showAgentSelector: false,
+        systemPrompt: 'You are Aura, a professional AI assistant. Help with tasks, provide accurate information, and offer practical solutions. Be clear, concise, and helpful.',
+        conversationType: 'assistant'
     }
 };
 
@@ -112,6 +152,7 @@ async function checkBackendStatus() {
 
 // Switch modes
 function switchMode(mode) {
+    console.log(`Switching from ${currentMode} to ${mode}`);
     currentMode = mode;
     
     // Update active button
@@ -126,8 +167,58 @@ function switchMode(mode) {
     document.getElementById('modeDescription').textContent = config.description;
     document.getElementById('currentModeInfo').textContent = config.info;
     
-    // Clear messages for new mode (optional)
-    // clearChat();
+    // Update system prompt for this mode
+    document.getElementById('systemPrompt').value = config.systemPrompt;
+    
+    // Show/hide agent selector based on mode
+    const agentGroup = document.querySelector('.setting-group:has(#agentSelect)');
+    if (agentGroup) {
+        if (config.showAgentSelector) {
+            agentGroup.style.display = 'block';
+        } else {
+            agentGroup.style.display = 'none';
+        }
+    }
+    
+    // Load messages for this mode (like switching Discord channels)
+    loadModeMessages();
+}
+
+// Load messages for current mode
+function loadModeMessages() {
+    const container = document.getElementById('messagesContainer');
+    container.innerHTML = '';
+    
+    // Reload all messages for this mode
+    modeMessages[currentMode].forEach(msg => {
+        const msgDiv = createMessageElement(msg.text, msg.type, msg.sender);
+        msgDiv.id = msg.id;
+        container.appendChild(msgDiv);
+    });
+    
+    // Scroll to bottom
+    container.scrollTop = container.scrollHeight;
+    
+    console.log(`Loaded ${modeMessages[currentMode].length} messages for ${currentMode} mode`);
+}
+
+// Create message element
+function createMessageElement(text, type, sender) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `message ${type}`;
+    
+    const senderSpan = document.createElement('div');
+    senderSpan.className = 'message-sender';
+    senderSpan.textContent = sender;
+    
+    const textSpan = document.createElement('div');
+    textSpan.className = 'message-text';
+    textSpan.textContent = text;
+    
+    msgDiv.appendChild(senderSpan);
+    msgDiv.appendChild(textSpan);
+    
+    return msgDiv;
 }
 
 // Toggle settings panel
@@ -138,13 +229,9 @@ function toggleSettings() {
 
 // Clear chat
 function clearChat() {
-    messages = [];
-    if (!invoke) {
-        console.error('❌ Invoke function not available');
-        return;
-    }
-    
+    modeMessages[currentMode] = [];
     document.getElementById('messagesContainer').innerHTML = '';
+    console.log(`Cleared chat for ${currentMode} mode`);
 }
 
 // Send message
@@ -153,6 +240,10 @@ async function sendMessage() {
     const message = input.value.trim();
     
     if (!message || !isBackendOnline) return;
+    if (!invoke) {
+        console.error('❌ Invoke function not available');
+        return;
+    }
     
     // Clear input
     input.value = '';
@@ -164,20 +255,31 @@ async function sendMessage() {
     const loadingId = addMessage('Thinking...', 'agent loading', 'AI');
     
     try {
-        // Get selected agent
-        const agent = document.getElementById('agentSelect').value;
+        // Get agent - use mode's default agent if selector is hidden
+        const config = MODE_CONFIG[currentMode];
+        const agent = config.showAgentSelector 
+            ? document.getElementById('agentSelect').value 
+            : config.defaultAgent;
+        
+        console.log(`Sending message in ${currentMode} mode with agent: ${agent}`);
+        
+        // Get system prompt from textarea
+        const systemPrompt = document.getElementById('systemPrompt').value.trim();
         
         // Call Tauri backend (Rust) which calls Python backend
         const response = await invoke('send_chat_message', {
             message: message,
-            agent: agent
+            agent: agent,
+            conversation_type: config.conversationType,
+            system_prompt: systemPrompt || config.systemPrompt
         });
         
         // Remove loading message
         removeMessage(loadingId);
         
-        // Add AI response
-        addMessage(response.response, 'agent', response.agent);
+        // Add AI response (show as "AI" for single-agent modes)
+        const displayName = config.showAgentSelector ? response.agent : 'AI';
+        addMessage(response.response, 'agent', displayName);
         
     } catch (error) {
         console.error('Send message failed:', error);
@@ -207,7 +309,8 @@ function addMessage(text, type, sender) {
     container.appendChild(messageDiv);
     container.scrollTop = container.scrollHeight;
     
-    messages.push({ id: messageId, text, type, sender });
+    // Store in mode-specific message array
+    modeMessages[currentMode].push({ id: messageId, text, type, sender });
     
     return messageId;
 }
@@ -218,7 +321,8 @@ function removeMessage(messageId) {
     if (element) {
         element.remove();
     }
-    messages = messages.filter(m => m.id !== messageId);
+    // Remove from mode-specific array
+    modeMessages[currentMode] = modeMessages[currentMode].filter(m => m.id !== messageId);
 }
 
 // Handle Enter key
