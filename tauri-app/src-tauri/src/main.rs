@@ -32,7 +32,7 @@ async fn send_chat_message(message: String, agent: Option<String>) -> Result<Cha
     };
     
     match client
-        .post("http://127.0.0.1:8000/chat")
+        .post("http://localhost:8000/chat")
         .json(&request)
         .send()
         .await
@@ -52,7 +52,7 @@ async fn send_chat_message(message: String, agent: Option<String>) -> Result<Cha
 async fn check_backend() -> Result<bool, String> {
     let client = reqwest::Client::new();
     
-    match client.get("http://127.0.0.1:8000/").send().await {
+    match client.get("http://localhost:8000/").send().await {
         Ok(response) => Ok(response.status().is_success()),
         Err(_) => Ok(false),
     }

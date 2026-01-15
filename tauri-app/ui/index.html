@@ -71,6 +71,13 @@
         <div class="settings-panel" id="settingsPanel">
             <h3>⚙️ Settings</h3>
             
+            <!-- System Prompt -->
+            <div class="setting-group">
+                <label>System Prompt</label>
+                <textarea id="systemPrompt" rows="3" placeholder="You are Aura, a helpful AI assistant...">You are Aura, a friendly, helpful AI assistant. Keep answers concise.</textarea>
+            </div>
+            
+            <!-- Agent Selection -->
             <div class="setting-group">
                 <label>Agent</label>
                 <select id="agentSelect">
@@ -81,15 +88,90 @@
                 </select>
             </div>
             
+            <!-- Sampling Presets -->
+            <div class="setting-group">
+                <label>Sampling Preset</label>
+                <select id="samplingPreset" onchange="applySamplingPreset()">
+                    <option value="custom">Custom</option>
+                    <option value="balanced" selected>Balanced</option>
+                    <option value="creative">Creative</option>
+                    <option value="assistant">Assistant</option>
+                    <option value="factual">Factual</option>
+                </select>
+            </div>
+            
+            <!-- Temperature -->
             <div class="setting-group">
                 <label>Temperature</label>
-                <input type="range" id="temperature" min="0" max="2" step="0.1" value="0.7">
+                <input type="range" id="temperature" min="0" max="2" step="0.1" value="0.7" oninput="document.getElementById('tempValue').textContent = this.value">
                 <span id="tempValue">0.7</span>
             </div>
             
+            <!-- Max Tokens -->
             <div class="setting-group">
                 <label>Max Tokens</label>
-                <input type="number" id="maxTokens" min="50" max="2000" step="50" value="200">
+                <input type="number" id="maxTokens" min="50" max="4096" step="50" value="512">
+            </div>
+            
+            <!-- Top-P -->
+            <div class="setting-group">
+                <label>Top-P (Nucleus Sampling)</label>
+                <input type="range" id="topP" min="0" max="1" step="0.05" value="0.9" oninput="document.getElementById('topPValue').textContent = this.value">
+                <span id="topPValue">0.9</span>
+            </div>
+            
+            <!-- Top-K -->
+            <div class="setting-group">
+                <label>Top-K</label>
+                <input type="number" id="topK" min="0" max="100" step="1" value="40">
+            </div>
+            
+            <!-- Repeat Penalty -->
+            <div class="setting-group">
+                <label>Repeat Penalty</label>
+                <input type="range" id="repeatPenalty" min="1.0" max="1.5" step="0.05" value="1.1" oninput="document.getElementById('repeatValue').textContent = this.value">
+                <span id="repeatValue">1.1</span>
+            </div>
+            
+            <!-- Target Sentences -->
+            <div class="setting-group">
+                <label>Target Sentences</label>
+                <input type="number" id="targetSentences" min="1" max="20" step="1" value="3">
+                <small style="color: #B5BAC1; font-size: 11px;">Auto-calculates max tokens (~35 tokens/sentence)</small>
+            </div>
+            
+            <!-- Enter Sends Toggle -->
+            <div class="setting-group">
+                <label>
+                    <input type="checkbox" id="enterSends" checked>
+                    Enter Sends Message
+                </label>
+            </div>
+            
+            <!-- Voice/TTS Toggle -->
+            <div class="setting-group">
+                <label>
+                    <input type="checkbox" id="voiceEnabled" checked>
+                    Voice Enabled (TTS)
+                </label>
+            </div>
+            
+            <!-- Theme Selection -->
+            <div class="setting-group">
+                <label>Theme</label>
+                <select id="themeSelect" onchange="applyTheme()">
+                    <option value="dark" selected>Dark (Discord)</option>
+                    <option value="midnight">Midnight</option>
+                    <option value="solarized">Solarized Dark</option>
+                    <option value="light">Light</option>
+                </select>
+            </div>
+            
+            <!-- UI Scale -->
+            <div class="setting-group">
+                <label>UI Scale</label>
+                <input type="range" id="uiScale" min="12" max="22" step="1" value="14" oninput="document.getElementById('scaleValue').textContent = this.value + 'px'; applyUIScale(this.value)">
+                <span id="scaleValue">14px</span>
             </div>
             
             <div class="setting-info">
