@@ -3,6 +3,7 @@
 
 mod llm;
 mod memory;
+mod models;
 
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
@@ -172,7 +173,9 @@ fn main() {
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             send_chat_message,
-            check_backend
+            check_backend,
+            models::get_available_models,
+            models::get_model_info
         ])
         .setup(|app| {
             println!("✅ Tauri setup complete");

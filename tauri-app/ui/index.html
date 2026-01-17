@@ -71,6 +71,15 @@
         <div class="settings-panel" id="settingsPanel">
             <h3>⚙️ Settings</h3>
             
+            <!-- Model Selection (NEW) -->
+            <div class="setting-group">
+                <label>🤖 Model</label>
+                <select id="modelSelect" onchange="onModelChange()">
+                    <option value="">Loading models...</option>
+                </select>
+                <button class="refresh-btn" onclick="refreshModels()" title="Refresh model list">🔄</button>
+            </div>
+            
             <!-- System Prompt -->
             <div class="setting-group">
                 <label>System Prompt</label>

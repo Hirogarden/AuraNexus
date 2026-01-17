@@ -28,8 +28,12 @@ llama-cpp-2 = { version = "0.1", features = [] }
 
 # Additional utilities
 anyhow = "1.0"
+walkdir = "2.4"  # Recursive directory scanning for model files
+reqwest = { version = "0.11", features = ["stream", "json"] }  # HTTP downloads
+futures-util = "0.3"  # Async streaming utilities
+chrono = { version = "0.4", features = ["serde"] }  # Timestamps for file metadata
+dirs = "5.0"  # Get user directories (home, etc.)
 thiserror = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 parking_lot = "0.12"
 

@@ -96,6 +96,9 @@ window.addEventListener('DOMContentLoaded', () => {
         statusText.textContent = 'Ready';
         sendBtn.disabled = false;
         console.log('✅ Native Rust backend ready');
+        
+        // Load available models
+        refreshModels();
     }, 100);
     
     // Temperature slider
@@ -412,4 +415,41 @@ function applyTheme() {
 // Apply UI scale
 function applyUIScale(size) {
     document.body.style.fontSize = size + 'px';
+}
+
+// Model Management
+async function refreshModels() {
+    console.log('🔄 Refreshing models...');
+    const select = document.getElementById('modelSelect');
+    
+    if (!invoke) {
+        console.error('❌ Tauri invoke not available');
+        select.innerHTML = '<option value="">Error: API not available</option>';
+        return;
+    }
+    
+    select.innerHTML = '<option value="">🔍 Scanning...</option>';
+    
+    try {
+        const models = await invoke('get_available_models');
+        console.log('✅ Found models:', models);
+        
+        if (models.length === 0) {
+            select.innerHTML = '<option value="">No models found</option>';
+        } else {
+            select.innerHTML = models.map(model => 
+                `<option value="${model.path}" title="${model.path}">${model.name} (${model.size_human})</option>`
+            ).join('');
+        }
+    } catch (error) {
+        console.error('❌ Failed to load models:', error);
+        select.innerHTML = '<option value="">Error loading models</option>';
+    }
+}
+
+function onModelChange() {
+    const select = document.getElementById('modelSelect');
+    const modelPath = select.value;
+    console.log('📦 Selected model:', modelPath);
+    // TODO: Implement model switching (requires backend changes)
 }

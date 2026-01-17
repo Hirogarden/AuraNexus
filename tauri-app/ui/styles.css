@@ -333,6 +333,7 @@ body {
 
 .setting-group {
     margin-bottom: 20px;
+    position: relative;
 }
 
 .setting-group label {
@@ -354,6 +355,38 @@ body {
     padding: 10px;
     color: #DCDDDE;
     font-size: 14px;
+}
+
+/* Model selector with refresh button */
+.setting-group:has(#modelSelect) {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: start;
+}
+
+.setting-group:has(#modelSelect) label {
+    grid-column: 1 / -1;
+}
+
+.setting-group:has(#modelSelect) select {
+    grid-column: 1;
+}
+
+.refresh-btn {
+    grid-column: 2;
+    background: #383A40;
+    border: none;
+    border-radius: 4px;
+    color: #DCDDDE;
+    cursor: pointer;
+    padding: 10px;
+    font-size: 16px;
+    transition: background 0.2s;
+}
+
+.refresh-btn:hover {
+    background: var(--accent);
 }
 
 .setting-group textarea {
