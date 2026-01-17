@@ -4,6 +4,9 @@
 mod llm;
 mod memory;
 mod models;
+mod memory_store;  // Translated from mem0
+mod text_chunker;  // Translated from llama_index
+mod rag_example;   // Example usage of translated modules
 
 use serde::{Deserialize, Serialize};
 use tauri::Manager;

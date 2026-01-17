@@ -239,6 +239,7 @@ dependencies = [
  "futures-util",
  "llama-cpp-2",
  "parking_lot",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
