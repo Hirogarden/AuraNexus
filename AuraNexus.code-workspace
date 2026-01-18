@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../../Repos"
+		},
+		{
+			"path": "../../AuraRAG"
 		}
 	],
 	"settings": {
