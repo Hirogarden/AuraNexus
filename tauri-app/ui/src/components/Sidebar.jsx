@@ -1,5 +1,5 @@
 import React from 'react';
-import { Heart, Stethoscope, Code2, Search } from 'lucide-react';
+import { Heart, Stethoscope, Code2, Search, BookOpen } from 'lucide-react';
 import './Sidebar.css';
 
 const modes = [
@@ -16,6 +16,13 @@ const modes = [
     icon: Stethoscope,
     description: 'Healthcare documentation & SOAP notes',
     color: 'var(--accent-clinical)',
+  },
+  {
+    id: 'youniverse',
+    name: "AI 'You'niverse",
+    icon: BookOpen,
+    description: 'Interactive storytelling & world-building',
+    color: 'var(--accent-youniverse)',
   },
   {
     id: 'developer',

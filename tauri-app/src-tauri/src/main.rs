@@ -35,6 +35,7 @@ struct ChatResponse {
 enum AppMode {
     Companion,
     Clinical,
+    Youniverse,
     Developer,
 }
 
@@ -43,6 +44,7 @@ impl AppMode {
         match self {
             AppMode::Companion => "companion".to_string(),
             AppMode::Clinical => "clinical".to_string(),
+            AppMode::Youniverse => "youniverse".to_string(),
             AppMode::Developer => "developer".to_string(),
         }
     }
@@ -59,6 +61,12 @@ impl AppMode {
                 You generate SOAP notes, suggest ICD-10 codes for reference, and help organize patient information. \
                 You ALWAYS remind providers to review and verify all AI-generated content before use. \
                 You maintain HIPAA compliance and log all PHI access.".to_string()
+            }
+            AppMode::Youniverse => {
+                "You are an imaginative AI storyteller in the 'You'niverse - a collaborative world-building experience. \
+                You craft engaging narratives, develop rich characters, and help users explore creative storylines. \
+                You adapt to different genres, maintain continuity across sessions, and encourage creative expression. \
+                You're playful yet thoughtful, helping users bring their stories to life.".to_string()
             }
             AppMode::Developer => {
                 "You are Aura Developer Mode, helping test and configure the AI system. \
@@ -186,7 +194,7 @@ async fn check_backend(state: tauri::State<'_, AppState>) -> Result<bool, String
         .map_err(|e| format!("Health check failed: {}", e))
 }
 
-// Switch between Companion/Clinical/Developer modes
+// Switch between Companion/Clinical/Youniverse/Developer modes
 #[tauri::command]
 async fn switch_mode(
     new_mode: String,
@@ -195,6 +203,7 @@ async fn switch_mode(
     let mode = match new_mode.as_str() {
         "companion" => AppMode::Companion,
         "clinical" => AppMode::Clinical,
+        "youniverse" => AppMode::Youniverse,
         "developer" => AppMode::Developer,
         _ => return Err(format!("Unknown mode: {}", new_mode)),
     };
