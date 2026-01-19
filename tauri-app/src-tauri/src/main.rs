@@ -7,176 +7,330 @@ mod models;
 mod memory_store;  // Translated from mem0
 mod text_chunker;  // Translated from llama_index
 mod rag_example;   // Example usage of translated modules
+mod python_bridge;  // Bridge to Python backend
 
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
-use tokio::sync::{mpsc, oneshot};
 use std::sync::Arc;
 use parking_lot::Mutex;
+use python_bridge::{PythonBridge, LlmConfig, ConversationEntry, SearchResult};
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct ChatMessage {
+    role: String,
+    content: String,
+    timestamp: String,
+    quality_score: Option<f32>,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ChatResponse {
     agent: String,
     response: String,
-    timestamp: Option<String>,
+    timestamp: String,
+    mode: String,
 }
 
-// Message types for LLM worker communication
-struct LlmRequest {
-    prompt: String,
-    response_tx: oneshot::Sender<Result<String, String>>,
+#[derive(Debug, Clone)]
+enum AppMode {
+    Companion,
+    Clinical,
+    Developer,
 }
 
-enum WorkerMessage {
-    Generate(LlmRequest),
-    CheckHealth(oneshot::Sender<bool>),
-    Shutdown,
+impl AppMode {
+    fn to_string(&self) -> String {
+        match self {
+            AppMode::Companion => "companion".to_string(),
+            AppMode::Clinical => "clinical".to_string(),
+            AppMode::Developer => "developer".to_string(),
+        }
+    }
+    
+    fn system_prompt(&self) -> String {
+        match self {
+            AppMode::Companion => {
+                "You are Aura, an empathetic AI companion providing emotional support and mental health guidance. \
+                You listen actively, validate feelings, and offer gentle suggestions. You remember past conversations \
+                and help users reflect on their growth. You are HIPAA-compliant and never share information externally.".to_string()
+            }
+            AppMode::Clinical => {
+                "You are Aura Clinical Assistant, helping healthcare providers with documentation and note-taking. \
+                You generate SOAP notes, suggest ICD-10 codes for reference, and help organize patient information. \
+                You ALWAYS remind providers to review and verify all AI-generated content before use. \
+                You maintain HIPAA compliance and log all PHI access.".to_string()
+            }
+            AppMode::Developer => {
+                "You are Aura Developer Mode, helping test and configure the AI system. \
+                You provide detailed metrics, explain sampling parameters, and help analyze conversation quality. \
+                You show technical details that are hidden in other modes.".to_string()
+            }
+        }
+    }
 }
 
-// Application state - just holds the channel sender
+// Application state with Python bridge
 struct AppState {
-    llm_tx: mpsc::UnboundedSender<WorkerMessage>,
-    memory: Arc<Mutex<memory::MemoryManager>>,
+    python_bridge: Arc<Mutex<PythonBridge>>,
+    conversation_history: Arc<Mutex<Vec<ConversationEntry>>>,
+    current_mode: Arc<Mutex<AppMode>>,
 }
 
-// Send message using native Rust LLM (no HTTP, no external processes)
+// Send message using Python backend with advanced sampling
 #[tauri::command]
 async fn send_chat_message(
     message: String,
-    agent: Option<String>,
-    conversation_type: Option<String>,
-    system_prompt: Option<String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<ChatResponse, String> {
-    println!("📩 Received message in {} mode", conversation_type.as_deref().unwrap_or("general"));
+    println!("📩 Received message");
     
-    // Get conversation context from memory
-    let memory_context = {
-        let memory = state.memory.lock();
-        memory.get_recent_context(5)
+    // Get current mode and its system prompt
+    let (mode, system_prompt) = {
+        let current_mode = state.current_mode.lock();
+        (current_mode.clone(), current_mode.system_prompt())
     };
     
-    // Build prompt with Llama 3.1 chat format
-    let system_prompt = system_prompt.unwrap_or_else(|| {
-        "You are Aura, a friendly and helpful AI assistant.".to_string()
-    });
-    
-    // Llama 3.1 Instruct format:
-    // <|begin_of_text|><|start_header_id|>system<|end_header_id|>
-    // {system}<|eot_id|><|start_header_id|>user<|end_header_id|>
-    // {prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
-    let full_prompt = format!(
-        "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{}\n\nRecent conversation:\n{}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
-        system_prompt,
-        memory_context,
-        message
-    );
-    
-    // Send request to LLM worker via channel
-    let (response_tx, response_rx) = oneshot::channel();
-    let request = LlmRequest {
-        prompt: full_prompt,
-        response_tx,
+    // Get conversation history
+    let history = {
+        state.conversation_history.lock().clone()
     };
     
-    state.llm_tx.send(WorkerMessage::Generate(request))
-        .map_err(|_| "LLM worker unavailable".to_string())?;
+    // Get appropriate LLM config for mode
+    let config = match mode {
+        AppMode::Companion => LlmConfig {
+            temperature: 0.7,
+            top_p: 0.95,
+            min_p: Some(0.05),
+            frequency_penalty: Some(0.2),
+            presence_penalty: Some(0.1),
+            dry_multiplier: Some(0.7),
+            ..Default::default()
+        },
+        AppMode::Clinical => LlmConfig {
+            temperature: 0.5,  // More factual for clinical
+            top_p: 0.9,
+            min_p: Some(0.1),
+            frequency_penalty: Some(0.3),
+            dry_multiplier: Some(0.8),
+            ..Default::default()
+        },
+        AppMode::Developer => LlmConfig {
+            temperature: 0.6,
+            top_p: 0.95,
+            min_p: Some(0.05),
+            ..Default::default()
+        },
+    };
     
-    // Wait for response from worker
-    let response = response_rx.await
-        .map_err(|_| "LLM worker disconnected".to_string())??;
+    // Generate response using Python bridge
+    let response_text = {
+        let bridge = state.python_bridge.lock();
+        bridge.generate(
+            message.clone(),
+            Some(system_prompt),
+            history.clone(),
+            config,
+        ).map_err(|e| format!("Failed to generate response: {}", e))?
+    };
     
-    // Save to memory
+    let timestamp = chrono::Utc::now().to_rfc3339();
+    
+    // Add to conversation history
     {
-        let mut memory = state.memory.lock();
-        memory.add_message("user", &message);
-        memory.add_message("assistant", &response);
+        let mut history = state.conversation_history.lock();
+        history.push(ConversationEntry {
+            role: "user".to_string(),
+            content: message.clone(),
+            timestamp: timestamp.clone(),
+            quality_score: None,
+        });
+        history.push(ConversationEntry {
+            role: "assistant".to_string(),
+            content: response_text.clone(),
+            timestamp: timestamp.clone(),
+            quality_score: None,
+        });
+        
+        // Keep only last 20 messages in memory
+        let history_len = history.len();
+        if history_len > 20 {
+            history.drain(0..history_len - 20);
+        }
     }
     
-    println!("✅ Generated response ({} chars)", response.len());
+    // Log to hierarchical storage (The Nexus Core)
+    {
+        let bridge = state.python_bridge.lock();
+        bridge.log_conversation(
+            message,
+            response_text.clone(),
+            mode.to_string(),
+        ).map_err(|e| format!("Failed to log conversation: {}", e))?;
+    }
+    
+    println!("✅ Generated response ({} chars)", response_text.len());
     
     Ok(ChatResponse {
-        agent: agent.unwrap_or_else(|| "narrator".to_string()),
-        response,
-        timestamp: Some(chrono::Utc::now().to_rfc3339()),
+        agent: "aura".to_string(),
+        response: response_text,
+        timestamp,
+        mode: mode.to_string(),
     })
 }
 
 // Check if LLM is ready (replaces backend health check)
 #[tauri::command]
 async fn check_backend(state: tauri::State<'_, AppState>) -> Result<bool, String> {
-    let (tx, rx) = oneshot::channel();
-    
-    state.llm_tx.send(WorkerMessage::CheckHealth(tx))
-        .map_err(|_| "LLM worker unavailable".to_string())?;
-    
-    rx.await.map_err(|_| "LLM worker disconnected".to_string())
+    let bridge = state.python_bridge.lock();
+    bridge.check_model_exists()
+        .map_err(|e| format!("Health check failed: {}", e))
 }
 
-// LLM worker thread - owns the LLM and processes requests
-fn spawn_llm_worker() -> mpsc::UnboundedSender<WorkerMessage> {
-    let (tx, mut rx) = mpsc::unbounded_channel();
+// Switch between Companion/Clinical/Developer modes
+#[tauri::command]
+async fn switch_mode(
+    new_mode: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<String, String> {
+    let mode = match new_mode.as_str() {
+        "companion" => AppMode::Companion,
+        "clinical" => AppMode::Clinical,
+        "developer" => AppMode::Developer,
+        _ => return Err(format!("Unknown mode: {}", new_mode)),
+    };
     
-    std::thread::spawn(move || {
-        println!("🔧 LLM worker thread starting...");
-        
-        // Initialize LLM in this dedicated thread
-        let mut llm = match llm::LlmManager::new() {
-            Ok(llm) => {
-                println!("✅ LLM loaded successfully in worker thread");
-                llm
-            }
-            Err(e) => {
-                eprintln!("❌ Failed to load LLM: {}", e);
-                return;
-            }
-        };
-        
-        // Process messages from channel
-        while let Some(msg) = rx.blocking_recv() {
-            match msg {
-                WorkerMessage::Generate(request) => {
-                    println!("🤖 Processing generation request...");
-                    let result = llm.generate(&request.prompt)
-                        .map_err(|e| format!("Generation failed: {}", e));
-                    
-                    // Send response back (ignore if receiver dropped)
-                    let _ = request.response_tx.send(result);
-                }
-                WorkerMessage::CheckHealth(response_tx) => {
-                    let _ = response_tx.send(llm.is_ready());
-                }
-                WorkerMessage::Shutdown => {
-                    println!("👋 LLM worker shutting down...");
-                    break;
-                }
-            }
-        }
-        
-        println!("🛑 LLM worker thread stopped");
-    });
+    {
+        let mut current_mode = state.current_mode.lock();
+        *current_mode = mode.clone();
+    }
     
-    tx
+    // Clear conversation history when switching modes
+    {
+        let mut history = state.conversation_history.lock();
+        history.clear();
+    }
+    
+    println!("🔄 Switched to {} mode", new_mode);
+    Ok(new_mode)
+}
+
+// Search past conversations using The Nexus Core
+#[tauri::command]
+async fn search_conversations(
+    query: String,
+    top_k: usize,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<SearchResult>, String> {
+    println!("🔍 Searching conversations: {}", query);
+    
+    let bridge = state.python_bridge.lock();
+    let results = bridge.search_memory(query, top_k)
+        .map_err(|e| format!("Search failed: {}", e))?;
+    
+    println!("✅ Found {} results", results.len());
+    Ok(results)
+}
+
+// Get recent conversation history
+#[tauri::command]
+async fn get_conversation_history(
+    limit: usize,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<ChatMessage>, String> {
+    let history = state.conversation_history.lock();
+    
+    let messages: Vec<ChatMessage> = history.iter()
+        .rev()
+        .take(limit)
+        .rev()
+        .map(|entry| ChatMessage {
+            role: entry.role.clone(),
+            content: entry.content.clone(),
+            timestamp: entry.timestamp.clone(),
+            quality_score: entry.quality_score,
+        })
+        .collect();
+    
+    Ok(messages)
+}
+
+// Get current mode
+#[tauri::command]
+async fn get_current_mode(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    let mode = state.current_mode.lock();
+    Ok(mode.to_string())
+}
+
+// Initialize model (download if needed)
+#[tauri::command]
+async fn initialize_model(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    println!("🔧 Initializing model...");
+    
+    let bridge = state.python_bridge.lock();
+    
+    // Check if model exists
+    let has_model = bridge.check_model_exists()
+        .map_err(|e| format!("Failed to check model: {}", e))?;
+    
+    if !has_model {
+        println!("📥 No model found, downloading starter model...");
+        
+        // Download starter model
+        let model_path = bridge.download_starter_model(|progress| {
+            println!("📊 Download progress: {:.1}%", progress * 100.0);
+        }).map_err(|e| format!("Failed to download model: {}", e))?;
+        
+        println!("✅ Model downloaded: {}", model_path.display());
+    }
+    
+    // Load model into memory
+    bridge.load_model(None)
+        .map_err(|e| format!("Failed to load model: {}", e))?;
+    
+    println!("✅ Model loaded and ready");
+    Ok("Model initialized successfully".to_string())
 }
 
 fn main() {
-    println!("🚀 Starting AuraNexus (Native Rust)...");
+    println!("🚀 Starting AuraNexus with Python Backend Integration...");
     
-    // Spawn LLM worker thread
-    let llm_tx = spawn_llm_worker();
+    // Initialize Python bridge
+    println!("🐍 Initializing Python bridge...");
+    let python_bridge = match PythonBridge::new() {
+        Ok(bridge) => {
+            println!("✅ Python bridge created");
+            // Initialize Python interpreter
+            {
+                let mut bridge_locked = bridge.lock();
+                bridge_locked.initialize()
+                    .expect("Failed to initialize Python backend");
+            }
+            println!("✅ Python backend initialized");
+            bridge
+        }
+        Err(e) => {
+            eprintln!("❌ Failed to create Python bridge: {}", e);
+            panic!("Cannot start without Python backend");
+        }
+    };
     
-    // Initialize memory system
-    println!("🧠 Initializing memory system...");
-    let memory = Arc::new(Mutex::new(memory::MemoryManager::new()));
-    println!("✅ Memory system ready");
-    
-    let app_state = AppState { llm_tx, memory };
+    // Create application state
+    let app_state = AppState {
+        python_bridge,
+        conversation_history: Arc::new(Mutex::new(Vec::new())),
+        current_mode: Arc::new(Mutex::new(AppMode::Companion)),  // Start in Companion mode
+    };
     
     tauri::Builder::default()
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             send_chat_message,
             check_backend,
+            switch_mode,
+            search_conversations,
+            get_conversation_history,
+            get_current_mode,
+            initialize_model,
             models::get_available_models,
             models::get_model_info
         ])
@@ -184,10 +338,50 @@ fn main() {
             println!("✅ Tauri setup complete");
             let window = app.get_window("main").unwrap();
             println!("🪟 Window created: {:?}", window.label());
+            
+            // Trigger model initialization on startup
+            let app_handle = app.app_handle();
+            tauri::async_runtime::spawn(async move {
+                use tauri::Manager;
+                println!("🔄 Starting model initialization...");
+                // Give the window time to load before showing download progress
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                
+                if let Some(state) = app_handle.try_state::<AppState>() {
+                    match initialize_model_impl(&state).await {
+                        Ok(_) => println!("✅ Model initialization complete"),
+                        Err(e) => eprintln!("❌ Model initialization failed: {}", e),
+                    }
+                }
+            });
+            
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
     
     println!("👋 AuraNexus closed.");
+}
+
+// Helper function for model initialization (called from setup)
+async fn initialize_model_impl(state: &AppState) -> Result<(), String> {
+    let bridge = state.python_bridge.lock();
+    
+    let has_model = bridge.check_model_exists()
+        .map_err(|e| format!("Failed to check model: {}", e))?;
+    
+    if !has_model {
+        println!("📥 No model found, downloading starter model...");
+        let model_path = bridge.download_starter_model(|progress| {
+            println!("📊 Download progress: {:.1}%", progress * 100.0);
+        }).map_err(|e| format!("Failed to download model: {}", e))?;
+        
+        println!("✅ Model downloaded: {}", model_path.display());
+    }
+    
+    bridge.load_model(None)
+        .map_err(|e| format!("Failed to load model: {}", e))?;
+    
+    println!("✅ Model loaded and ready");
+    Ok(())
 }

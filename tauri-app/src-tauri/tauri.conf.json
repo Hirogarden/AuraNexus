@@ -1,9 +1,9 @@
 {
   "build": {
     "beforeDevCommand": "",
-    "beforeBuildCommand": "",
-    "devPath": "../ui",
-    "distDir": "../ui"
+    "beforeBuildCommand": "cd ../ui && npm run build",
+    "devPath": "http://localhost:1420",
+    "distDir": "../ui/dist"
   },
   "package": {
     "productName": "AuraNexus",

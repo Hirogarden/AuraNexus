@@ -1,0 +1,78 @@
+.app {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app[data-mode="companion"] {
+  --accent-color: var(--accent-companion);
+}
+
+.app[data-mode="clinical"] {
+  --accent-color: var(--accent-clinical);
+}
+
+.app[data-mode="developer"] {
+  --accent-color: var(--accent-developer);
+}
+
+.app-main {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+/* Loading Screen */
+.app-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: var(--bg-primary);
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  text-align: center;
+  max-width: 400px;
+  padding: 2rem;
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--bg-tertiary);
+  border-top-color: var(--accent-companion);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-content h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.loading-content p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+}

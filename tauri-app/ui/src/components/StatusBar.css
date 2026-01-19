@@ -1,0 +1,42 @@
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 2rem;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.8125rem;
+}
+
+.status-section {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-tertiary);
+}
+
+.status-label {
+  font-weight: 500;
+}
+
+.mode-badge {
+  padding: 0.25rem 0.75rem;
+  background: var(--badge-color);
+  background-opacity: 0.1;
+  border: 1px solid var(--badge-color);
+  border-radius: var(--radius-sm);
+  color: var(--badge-color);
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+@media (max-width: 768px) {
+  .status-bar {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  
+  .status-section {
+    flex: 1 1 50%;
+  }
+}

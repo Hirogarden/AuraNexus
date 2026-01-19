@@ -462,3 +462,90 @@ def get_sampling_preset(preset_name: str) -> dict:
     }
     
     return presets.get(preset_name, presets["chat"])
+
+
+def find_available_model() -> Optional[str]:
+    """
+    Search for an available .gguf model in common locations.
+    Used by Rust bridge to check if a model exists.
+    
+    Returns:
+        Path to model if found, None otherwise
+    """
+    search_paths = [
+        Path("./models"),
+        Path("../models"),
+        Path("../../models"),  # For Tauri development structure
+        Path.home() / "models",
+        Path("C:/models") if os.name == 'nt' else Path("/models")
+    ]
+    
+    for search_path in search_paths:
+        if not search_path.exists():
+            continue
+        
+        # Find .gguf files
+        gguf_files = list(search_path.glob("*.gguf"))
+        
+        if gguf_files:
+            model_path = str(gguf_files[0])
+            logger.info(f"Found model: {model_path}")
+            return model_path
+    
+    return None
+
+
+def generate_with_context(
+    prompt: str,
+    system_prompt: Optional[str] = None,
+    conversation_history: Optional[list] = None,
+    **kwargs
+) -> str:
+    """
+    Generate response with conversation context.
+    Called by Rust bridge with full conversation history.
+    
+    Args:
+        prompt: Current user message
+        system_prompt: System/personality prompt
+        conversation_history: List of {role, content, timestamp} dicts
+        **kwargs: Sampling parameters (temperature, top_p, etc.)
+    
+    Returns:
+        Generated response text
+    """
+    if _llm_instance is None:
+        raise RuntimeError("No model loaded")
+    
+    # Build full prompt with context
+    full_prompt_parts = []
+    
+    # Add system prompt if provided
+    if system_prompt:
+        full_prompt_parts.append(f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{system_prompt}<|eot_id|>")
+    
+    # Add conversation history (last 5 exchanges for context)
+    if conversation_history:
+        recent_history = conversation_history[-10:]  # Last 10 messages = 5 exchanges
+        for entry in recent_history:
+            role = entry.get("role", "user")
+            content = entry.get("content", "")
+            full_prompt_parts.append(f"<|start_header_id|>{role}<|end_header_id|>\n\n{content}<|eot_id|>")
+    
+    # Add current prompt
+    full_prompt_parts.append(f"<|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|>")
+    full_prompt_parts.append("<|start_header_id|>assistant<|end_header_id|>\n\n")
+    
+    full_prompt = "".join(full_prompt_parts)
+    
+    # Generate with provided sampling parameters
+    response = generate(
+        prompt=full_prompt,
+        **kwargs
+    )
+    
+    if response is None:
+        raise RuntimeError("Generation failed")
+    
+    return response
+

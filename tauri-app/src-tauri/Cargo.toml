@@ -38,6 +38,9 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 parking_lot = "0.12"
 regex = "1.10"  # For text chunking sentence detection
 
+# Python interop - Connect to existing Python backend
+pyo3 = { version = "0.20", features = ["auto-initialize"] }
+
 [features]
 default = []
 custom-protocol = ["tauri/custom-protocol"]
