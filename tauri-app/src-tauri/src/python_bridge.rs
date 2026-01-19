@@ -83,11 +83,11 @@ impl PythonBridge {
         // Try multiple locations
         let search_paths = vec![
             // Development: from tauri-app/src-tauri
-            current_dir.parent()?.parent()?.join("electron-app").join("backend"),
+            current_dir.parent()?.parent()?.join("electron-app.OLD").join("backend"),
             // Alternative: if running from tauri-app
-            current_dir.parent()?.join("electron-app").join("backend"),
+            current_dir.parent()?.join("electron-app.OLD").join("backend"),
             // Alternative: if running from workspace root
-            current_dir.join("electron-app").join("backend"),
+            current_dir.join("electron-app.OLD").join("backend"),
             // Production: bundled with exe
             std::env::current_exe().ok()?.parent()?.join("backend"),
         ];
