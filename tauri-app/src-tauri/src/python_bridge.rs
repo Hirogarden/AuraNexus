@@ -122,9 +122,11 @@ impl PythonBridge {
             path.call_method1("insert", (0, self.backend_path.to_str().unwrap()))?;
             
             // Also add parent directory (for nexus_core_* modules)
-            if let Some(parent) = self.backend_path.parent()?.parent() {
-                println!("🐍 Adding workspace root to sys.path: {}", parent.display());
-                path.call_method1("insert", (0, parent.to_str().unwrap()))?;
+            if let Some(backend_parent) = self.backend_path.parent() {
+                if let Some(workspace_root) = backend_parent.parent() {
+                    println!("🐍 Adding workspace root to sys.path: {}", workspace_root.display());
+                    path.call_method1("insert", (0, workspace_root.to_str().unwrap()))?;
+                }
             }
             
             // Import backend modules to verify they load
