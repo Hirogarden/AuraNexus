@@ -26,7 +26,7 @@ function StatusBar({ modelStatus, currentMode }) {
     <div className="status-bar">
       <div className="status-section">
         <Shield size={14} />
-        <span className="status-label">HIPAA Compliant</span>
+        <span className="status-label">Private & Secure</span>
       </div>
       
       <div className="status-section">

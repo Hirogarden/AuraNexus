@@ -31,7 +31,7 @@ function App() {
           setCurrentMode(mode.toLowerCase());
           
           // Load conversation history
-          const history = await invoke('get_conversation_history');
+          const history = await invoke('get_conversation_history', { limit: 50 });
           setMessages(history);
         } else {
           // Need to download and initialize model

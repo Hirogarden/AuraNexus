@@ -38,12 +38,11 @@ tauri-app/
 - Surface: `#2a2a2a`
 - Text Primary: `#e0e0e0`
 - Text Secondary: `#a0a0a0`
-- Accent Purple: `#9d4edd` (Companion Mode)
-- Accent Blue: `#4cc9f0` (Clinical Mode)
-- Accent Green: `#06d6a0` (Developer Mode)
+- Accent Purple: `#8b5cf6` (Companion Mode)
+- Accent Orange: `#f59e0b` (You'niverse Mode)
 - Border: `#3a3a3a`
 - Input Background: `#2a2a2a`
-- Button Hover: `rgba(157, 78, 221, 0.1)`
+- Button Hover: `rgba(139, 92, 246, 0.1)`
 
 ### Typography
 - Font: System UI (-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto)
@@ -58,29 +57,24 @@ tauri-app/
 - Message gap: 16px
 - Input padding: 16px
 
-## Three Modes
+## Two Modes
 
 ### 1. Companion Mode (💜)
-- Icon: Heart emoji
-- Color: Purple `#9d4edd`
-- System Prompt: "You are Aura, a warm and empathetic AI companion..."
+- Icon: Heart
+- Color: Purple `#8b5cf6`
+- System Prompt: "You are a helpful and versatile AI assistant..."
 
-### 2. Clinical Mode (💙)
-- Icon: Stethoscope emoji  
-- Color: Blue `#4cc9f0`
-- System Prompt: "You are Aura, a professional clinical assistant..."
-
-### 3. Developer Mode (💚)
-- Icon: Code emoji
-- Color: Green `#06d6a0`
-- System Prompt: "You are Aura, a technical expert and coding assistant..."
+### 2. You'niverse Mode (🧡)
+- Icon: BookOpen
+- Color: Orange `#f59e0b`
+- System Prompt: "You are an imaginative AI storyteller..."
 
 ## Component Details
 
 ### App.jsx
 ```jsx
 - State: currentMode, messages, isLoading, currentModel
-- Modes: companion, clinical, developer
+- Modes: companion, youniverse
 - Tauri invoke: send_chat_message, check_backend, get_current_mode
 - Message handling: User input → Loading state → Stream response
 ```
@@ -88,7 +82,7 @@ tauri-app/
 ### Sidebar.jsx
 ```jsx
 - Logo with gradient (Aura = purple, Nexus = white)
-- Three mode buttons with icons, titles, descriptions
+- Two mode buttons with icons, titles, descriptions
 - Active state: border-left 3px + background highlight
 - Settings button (⚙️) at bottom
 - Clear Chat button (🗑️) in red
@@ -225,5 +219,5 @@ export default {
 ## Notes
 - Backend path: `electron-app.OLD/backend/` (Python)
 - Nexus Core modules: workspace root (nexus_core_*.py)
-- All PHI encrypted, HIPAA compliant
-- No external API calls with sensitive data
+- Optional encryption: AES-256-GCM
+- Fully offline, no external API calls

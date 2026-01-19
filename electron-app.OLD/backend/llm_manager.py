@@ -514,8 +514,19 @@ def generate_with_context(
     Returns:
         Generated response text
     """
+    # TEST MODE: Return mock response when no model is loaded
     if _llm_instance is None:
-        raise RuntimeError("No model loaded")
+        # Provide helpful test responses based on the prompt
+        mock_responses = [
+            "Hello! I'm AuraNexus running in test mode. A language model hasn't been loaded yet, so I'm responding with pre-programmed messages to verify the connection is working.",
+            "The UI looks great! Everything is connected properly. To get real AI responses, you'll need to download a GGUF model file.",
+            "I can see your messages are reaching me through the Rust → Python bridge successfully! Once you load a model, I'll be able to generate real responses.",
+            "All systems operational! The Tauri frontend, Rust backend, and Python bridge are all communicating correctly. Just waiting for a language model to be loaded.",
+        ]
+        
+        # Rotate through responses or pick based on message count
+        response_index = len(conversation_history) % len(mock_responses) if conversation_history else 0
+        return mock_responses[response_index]
     
     # Build full prompt with context
     full_prompt_parts = []

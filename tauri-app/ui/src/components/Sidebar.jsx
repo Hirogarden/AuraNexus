@@ -1,5 +1,5 @@
 import React from 'react';
-import { Heart, Stethoscope, Code2, Search, BookOpen } from 'lucide-react';
+import { Heart, BookOpen, Search } from 'lucide-react';
 import './Sidebar.css';
 
 const modes = [
@@ -7,15 +7,8 @@ const modes = [
     id: 'companion',
     name: 'Companion Mode',
     icon: Heart,
-    description: 'Empathetic support & mental wellness',
+    description: 'Helpful assistant for any task',
     color: 'var(--accent-companion)',
-  },
-  {
-    id: 'clinical',
-    name: 'Clinical Mode',
-    icon: Stethoscope,
-    description: 'Healthcare documentation & SOAP notes',
-    color: 'var(--accent-clinical)',
   },
   {
     id: 'youniverse',
@@ -23,13 +16,6 @@ const modes = [
     icon: BookOpen,
     description: 'Interactive storytelling & world-building',
     color: 'var(--accent-youniverse)',
-  },
-  {
-    id: 'developer',
-    name: 'Developer Mode',
-    icon: Code2,
-    description: 'Testing, metrics & configuration',
-    color: 'var(--accent-developer)',
   },
 ];
 
@@ -41,7 +27,7 @@ function Sidebar({ currentMode, onModeChange }) {
           <span className="title-aura">Aura</span>
           <span className="title-nexus">Nexus</span>
         </h1>
-        <p className="sidebar-subtitle">AI Healthcare Assistant</p>
+        <p className="sidebar-subtitle">AI Companion & Assistant</p>
       </div>
       
       <div className="mode-selector">
@@ -59,9 +45,15 @@ function Sidebar({ currentMode, onModeChange }) {
                 onClick={() => onModeChange(mode.id)}
                 style={{ '--mode-color': mode.color }}
               >
-                <div className="mode-icon">
-                  <Icon size={20} />
-                </div>
+                {mode.id === 'youniverse' ? (
+                  <div className="mode-logo">
+                    <img src="/youniverse-logo.png" alt="You'niverse" />
+                  </div>
+                ) : (
+                  <div className="mode-icon">
+                    <Icon size={20} />
+                  </div>
+                )}
                 
                 <div className="mode-info">
                   <span className="mode-name">{mode.name}</span>
@@ -83,7 +75,7 @@ function Sidebar({ currentMode, onModeChange }) {
         
         <div className="footer-info">
           <p className="footer-text">
-            HIPAA Compliant • Fully Offline
+            Private & Secure • Fully Offline
           </p>
           <p className="footer-version">
             Version 1.0.0

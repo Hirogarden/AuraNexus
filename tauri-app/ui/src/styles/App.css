@@ -9,12 +9,8 @@
   --accent-color: var(--accent-companion);
 }
 
-.app[data-mode="clinical"] {
-  --accent-color: var(--accent-clinical);
-}
-
-.app[data-mode="developer"] {
-  --accent-color: var(--accent-developer);
+.app[data-mode="youniverse"] {
+  --accent-color: var(--accent-youniverse);
 }
 
 .app-main {

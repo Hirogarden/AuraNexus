@@ -31,10 +31,9 @@ Response back through chain
 
 ### 1. Global CSS (`src/styles/global.css`)
 - **Deep Space Dark Theme** with professional color palette
-- Three mode-specific accent colors:
+- Two mode-specific accent colors:
   - Companion Mode: Purple (#8b5cf6)
-  - Clinical Mode: Blue (#3b82f6)
-  - Developer Mode: Green (#10b981)
+  - You'niverse Mode: Orange (#f59e0b)
 - Complete utility class system
 - Smooth animations and transitions
 - Custom scrollbar styling
@@ -49,14 +48,13 @@ Response back through chain
 - **Error Handling**: Displays error messages in chat
 
 ### 3. Sidebar Component (`src/components/Sidebar.jsx`)
-- **Mode Selector**: 3 beautiful mode cards with icons
+- **Mode Selector**: 2 beautiful mode cards with icons
   - Heart icon for Companion Mode
-  - Stethoscope for Clinical Mode
-  - Code2 for Developer Mode
+  - BookOpen icon for You'niverse Mode
 - **Visual Feedback**: Active mode indicator with pulsing dot
 - **Brand Identity**: Gradient AuraNexus title
 - **Search Button**: Placeholder for memory search feature
-- **Footer**: HIPAA compliance badge, version number
+- **Footer**: Version number, privacy badge
 
 ### 4. ChatWindow Component (`src/components/ChatWindow.jsx`)
 - **Message Display**: User and assistant messages with avatars
@@ -69,7 +67,7 @@ Response back through chain
 - **Status Indicator**: Ready/initializing status with pulsing dot
 
 ### 5. StatusBar Component (`src/components/StatusBar.jsx`)
-- **HIPAA Compliance**: Shield icon + badge
+- **Privacy Badge**: Shield icon + privacy status
 - **Offline Status**: Wi-Fi off icon showing no internet required
 - **Model Status**: Hard drive icon with model state
 - **Mode Badge**: Colored badge showing current mode
@@ -98,7 +96,7 @@ Response back through chain
 ## Features Implemented
 
 ### ✅ Complete
-1. **Three-Mode System**: Companion, Clinical, Developer
+1. **Two-Mode System**: Companion, You'niverse
 2. **Real-time Chat**: Send messages, receive responses
 3. **Conversation History**: Last 20 messages kept in memory
 4. **Mode Switching**: Clear history when changing modes
@@ -150,7 +148,7 @@ tauri-app/
 1. **send_chat_message** - Generate AI response with conversation context
 2. **search_conversations** - Query past conversations (Nexus Core)
 3. **get_conversation_history** - Retrieve recent messages
-4. **switch_mode** - Change between Companion/Clinical/Developer
+4. **switch_mode** - Change between Companion/Youniverse
 5. **get_current_mode** - Get active mode
 6. **initialize_model** - Download and load starter model
 7. **check_backend** - Verify model availability
@@ -224,11 +222,11 @@ Following the user's directive: **"Take our time and make this look nice"**
 - **Maintainable**: Clean component structure, separated concerns
 - **Extensible**: Easy to add new features (search, settings, export)
 
-## HIPAA Compliance Notes
+## Privacy & Security Features
 
 - ✅ **Fully Offline**: No external API calls, status shown in footer
 - ✅ **Local Processing**: All LLM inference on device
-- ✅ **Encrypted Storage**: The Nexus Core handles secure storage
+- ✅ **Encrypted Storage**: Optional AES-256-GCM encryption available
 - ✅ **No Telemetry**: No analytics or tracking
 - ✅ **Audit Trail**: All conversations logged with timestamps
 

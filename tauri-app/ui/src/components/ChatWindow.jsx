@@ -42,8 +42,7 @@ function ChatWindow({ messages, onSendMessage, isBackendReady, currentMode }) {
   const getModeLabel = () => {
     switch (currentMode) {
       case 'companion': return 'Companion';
-      case 'clinical': return 'Clinical';
-      case 'developer': return 'Developer';
+      case 'youniverse': return 'You\'niverse';
       default: return 'Assistant';
     }
   };
@@ -67,12 +66,17 @@ function ChatWindow({ messages, onSendMessage, isBackendReady, currentMode }) {
       <div className="messages-container">
         {messages.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-icon">💬</div>
-            <h3 className="empty-title">Start a conversation</h3>
+            {currentMode === 'youniverse' ? (
+              <div className="empty-logo">
+                <img src="/youniverse-logo.png" alt="You'niverse" style={{ width: '120px', height: '120px', opacity: 0.8 }} />
+              </div>
+            ) : (
+              <div className="empty-icon">💬</div>
+            )}
+            <h3 className="empty-title">{currentMode === 'youniverse' ? 'Your Universe Awaits' : 'Start a conversation'}</h3>
             <p className="empty-description">
-              {currentMode === 'companion' && 'Share your thoughts and feelings. I\'m here to listen and support you.'}
-              {currentMode === 'clinical' && 'Begin documenting patient information, creating notes, or reviewing records.'}
-              {currentMode === 'developer' && 'Test features, review metrics, or configure system settings.'}
+              {currentMode === 'companion' && 'I\'m here to help with any questions, tasks, or conversations you\'d like to have.'}
+              {currentMode === 'youniverse' && 'An infinite canvas for storytelling. Create characters, build worlds, and explore limitless possibilities. Your imagination is the only boundary.'}
             </p>
           </div>
         ) : (

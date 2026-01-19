@@ -5,7 +5,7 @@
 ### Backend (100% Functional)
 - **Location**: `electron-app/backend/core_app.py`
 - **Status**: ✅ Running perfectly on http://localhost:8000
-- **LLM**: Qwen2.5-0.5B-Instruct (468MB, in-process, HIPAA-compliant)
+- **LLM**: Qwen2.5-0.5B-Instruct (468MB, in-process, local inference)
 - **Memory**: ChromaDB + sentence-transformers for RAG
 - **Agents**: 4 async agents (narrator, character_1, character_2, director)
 - **Test**: `curl http://127.0.0.1:8000/` returns status with all agents

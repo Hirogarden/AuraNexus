@@ -1,6 +1,6 @@
 """
 The Nexus Core - External Data Source Manager
-Handles USB drives and network sources with HIPAA compliance.
+Handles USB drives and network sources with encryption and audit logging.
 """
 
 from pathlib import Path
@@ -13,7 +13,7 @@ from datetime import datetime
 
 class DataSourceManager:
     """
-    Manage external data sources (USB, network drives) with HIPAA compliance.
+    Manage external data sources (USB, network drives) with encryption and audit logging.
     """
     
     def __init__(self, base_path: str = "./nexus_data"):
@@ -360,9 +360,9 @@ class DataSourceManager:
     
     def _audit_log(self, action: str, details: Dict[str, Any]):
         """
-        HIPAA-compliant audit logging.
+        Comprehensive audit logging for data access and modifications.
         
-        Logs all data access and modifications for compliance.
+        Logs all data operations with timestamps for security and transparency.
         """
         log_entry = {
             "timestamp": datetime.now().isoformat(),

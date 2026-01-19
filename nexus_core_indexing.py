@@ -453,19 +453,19 @@ if __name__ == "__main__":
     if LLAMA_INDEX_AVAILABLE:
         # Add demo documents
         manager.add_document_hierarchical(
-            text="The patient shows symptoms of seasonal allergies.",
+            text="The user prefers morning conversations and enjoys discussing science topics.",
             doc_id="doc_001",
             timestamp=datetime(2024, 3, 15),
-            topics=["medical"],
-            metadata={"mode": "clinical"}
+            topics=["preferences"],
+            metadata={"mode": "companion"}
         )
         
         manager.add_document_hierarchical(
-            text="Fixed the API endpoint bug in the authentication module.",
+            text="In the kingdom of Aetheria, the ancient dragon sleeps beneath the mountain.",
             doc_id="doc_002",
             timestamp=datetime(2024, 3, 16),
-            topics=["technical"],
-            metadata={"mode": "developer"}
+            topics=["storytelling"],
+            metadata={"mode": "youniverse"}
         )
         
         print("\n✅ Added demo documents to hierarchical indices")

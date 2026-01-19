@@ -34,44 +34,28 @@ struct ChatResponse {
 #[derive(Debug, Clone)]
 enum AppMode {
     Companion,
-    Clinical,
     Youniverse,
-    Developer,
 }
 
 impl AppMode {
     fn to_string(&self) -> String {
         match self {
             AppMode::Companion => "companion".to_string(),
-            AppMode::Clinical => "clinical".to_string(),
             AppMode::Youniverse => "youniverse".to_string(),
-            AppMode::Developer => "developer".to_string(),
         }
     }
     
     fn system_prompt(&self) -> String {
         match self {
             AppMode::Companion => {
-                "You are Aura, an empathetic AI companion providing emotional support and mental health guidance. \
-                You listen actively, validate feelings, and offer gentle suggestions. You remember past conversations \
-                and help users reflect on their growth. You are HIPAA-compliant and never share information externally.".to_string()
-            }
-            AppMode::Clinical => {
-                "You are Aura Clinical Assistant, helping healthcare providers with documentation and note-taking. \
-                You generate SOAP notes, suggest ICD-10 codes for reference, and help organize patient information. \
-                You ALWAYS remind providers to review and verify all AI-generated content before use. \
-                You maintain HIPAA compliance and log all PHI access.".to_string()
+                "You are Aura, a helpful and versatile AI assistant. You help with any task - answering questions, \
+                brainstorming ideas, solving problems, providing information, or just having a conversation. \
+                You're friendly, clear, and adapt to what the user needs.".to_string()
             }
             AppMode::Youniverse => {
-                "You are an imaginative AI storyteller in the 'You'niverse - a collaborative world-building experience. \
-                You craft engaging narratives, develop rich characters, and help users explore creative storylines. \
-                You adapt to different genres, maintain continuity across sessions, and encourage creative expression. \
-                You're playful yet thoughtful, helping users bring their stories to life.".to_string()
-            }
-            AppMode::Developer => {
-                "You are Aura Developer Mode, helping test and configure the AI system. \
-                You provide detailed metrics, explain sampling parameters, and help analyze conversation quality. \
-                You show technical details that are hidden in other modes.".to_string()
+                "You are an imaginative AI storyteller in the 'You'niverse. You craft engaging narratives, \
+                develop rich characters, and help users explore creative storylines. You adapt to different genres, \
+                maintain story continuity, and encourage creative expression.".to_string()
             }
         }
     }
@@ -114,18 +98,13 @@ async fn send_chat_message(
             dry_multiplier: Some(0.7),
             ..Default::default()
         },
-        AppMode::Clinical => LlmConfig {
-            temperature: 0.5,  // More factual for clinical
-            top_p: 0.9,
-            min_p: Some(0.1),
-            frequency_penalty: Some(0.3),
-            dry_multiplier: Some(0.8),
-            ..Default::default()
-        },
-        AppMode::Developer => LlmConfig {
-            temperature: 0.6,
+        AppMode::Youniverse => LlmConfig {
+            temperature: 0.85,  // More creative for storytelling
             top_p: 0.95,
-            min_p: Some(0.05),
+            min_p: Some(0.02),
+            frequency_penalty: Some(0.1),
+            presence_penalty: Some(0.2),
+            dry_multiplier: Some(0.5),
             ..Default::default()
         },
     };
@@ -194,7 +173,7 @@ async fn check_backend(state: tauri::State<'_, AppState>) -> Result<bool, String
         .map_err(|e| format!("Health check failed: {}", e))
 }
 
-// Switch between Companion/Clinical/Youniverse/Developer modes
+// Switch between Companion/Youniverse modes
 #[tauri::command]
 async fn switch_mode(
     new_mode: String,
@@ -202,9 +181,7 @@ async fn switch_mode(
 ) -> Result<String, String> {
     let mode = match new_mode.as_str() {
         "companion" => AppMode::Companion,
-        "clinical" => AppMode::Clinical,
         "youniverse" => AppMode::Youniverse,
-        "developer" => AppMode::Developer,
         _ => return Err(format!("Unknown mode: {}", new_mode)),
     };
     
