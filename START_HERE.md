@@ -86,6 +86,11 @@ pip install -r requirements-phase2.txt
 3. **Complete:** [SECURITY_CHECKLIST.md](./SECURITY_CHECKLIST.md) - Required for every feature
 4. **Follow:** [DEVELOPMENT_WORKFLOW.md](./DEVELOPMENT_WORKFLOW.md) - Step-by-step process
 
+### Working on Memory System?
+1. **Review:** [HIERARCHICAL_MEMORY_GUIDE.md](./HIERARCHICAL_MEMORY_GUIDE.md) - Current 5-layer memory architecture
+2. **Explore:** [RLM_QUICK_REFERENCE.md](./RLM_QUICK_REFERENCE.md) - Quick start for RLM integration
+3. **Deep Dive:** [RLM_INTEGRATION_GUIDE.md](./RLM_INTEGRATION_GUIDE.md) - Complete RLM implementation blueprint
+
 ---
 
 ## 🔐 Remember: HIPAA Compliance Rules
