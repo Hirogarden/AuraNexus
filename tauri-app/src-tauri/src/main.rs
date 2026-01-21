@@ -145,15 +145,16 @@ async fn send_chat_message(
         }
     }
     
-    // Log to hierarchical storage (The Nexus Core)
-    {
-        let bridge = state.python_bridge.lock();
-        bridge.log_conversation(
-            message,
-            response_text.clone(),
-            mode.to_string(),
-        ).map_err(|e| format!("Failed to log conversation: {}", e))?;
-    }
+    // Log to hierarchical storage (The Nexus Core) - Disabled in mock mode
+    // TODO: Re-enable when real LLM and persistence is set up
+    // {
+    //     let bridge = state.python_bridge.lock();
+    //     bridge.log_conversation(
+    //         message,
+    //         response_text.clone(),
+    //         mode.to_string(),
+    //     ).map_err(|e| format!("Failed to log conversation: {}", e))?;
+    // }
     
     println!("✅ Generated response ({} chars)", response_text.len());
     
