@@ -29,7 +29,7 @@ llama-cpp-2 = { version = "0.1", features = [] }
 # Additional utilities
 anyhow = "1.0"
 walkdir = "2.4"  # Recursive directory scanning for model files
-reqwest = { version = "0.11", features = ["stream", "json"] }  # HTTP downloads
+reqwest = { version = "0.11", features = ["stream", "json", "blocking"] }  # HTTP downloads and LLM server calls
 futures-util = "0.3"  # Async streaming utilities
 chrono = { version = "0.4", features = ["serde"] }  # Timestamps for file metadata
 dirs = "5.0"  # Get user directories (home, etc.)

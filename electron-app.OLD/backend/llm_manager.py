@@ -22,6 +22,10 @@ import os
 from typing import Optional, Dict
 from pathlib import Path
 
+# Write to file to debug if module is loaded
+with open("C:/Users/hirog/All-In-One/AuraNexus/python_debug.txt", "w") as f:
+    f.write("[PYTHON] llm_manager.py MODULE IMPORTED!\n")
+
 print("=" * 60, flush=True)
 print("[PYTHON] llm_manager.py MODULE IMPORTED!", flush=True)
 print("=" * 60, flush=True)
@@ -79,11 +83,14 @@ def load_model(
         # Import llama-cpp-python
         try:
             from llama_cpp import Llama
-        except ImportError:
-            logger.error("llama-cpp-python not installed. Run: pip install llama-cpp-python")
+        except ImportError as e:
+            error_msg = f"llama-cpp-python not installed: {e}"
+            logger.error(error_msg)
+            print(f"[ERROR] {error_msg}", flush=True)
             return False
         
         logger.info(f"Loading model: {model_path}")
+        print(f"[LOADING] Starting model load: {model_path}", flush=True)
         logger.info(f"  Context size: {n_ctx}")
         
         # Auto-detect GPU and optimize layers if not specified
@@ -121,13 +128,19 @@ def load_model(
         model_size = os.path.getsize(model_path) / (1024**3)  # GB
         logger.info(f"✅ Model loaded successfully ({model_size:.2f} GB)")
         logger.info(f"✅ Running IN-PROCESS (no external servers)")
+        print(f"[SUCCESS] Model loaded! Size: {model_size:.2f} GB", flush=True)
         
         return True
         
     except Exception as e:
-        logger.error(f"Failed to load model: {e}")
+        error_msg = f"Failed to load model: {e}"
+        logger.error(error_msg)
+        print(f"[ERROR] {error_msg}", flush=True)
+        import traceback
+        traceback.print_exc()
         _llm_instance = None
         _model_path = None
+        return False
         return False
 
 
@@ -579,12 +592,12 @@ def generate_with_context(
     if _llm_instance is None:
         return "Error: Model failed to load properly."
     
-    # Build full prompt with context
+    # Build full prompt with context (using simpler format for small model)
     full_prompt_parts = []
     
     # Add system prompt if provided
     if system_prompt:
-        full_prompt_parts.append(f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{system_prompt}<|eot_id|>")
+        full_prompt_parts.append(f"System: {system_prompt}\n\n")
     
     # Add conversation history (last 5 exchanges for context)
     if conversation_history:
@@ -592,13 +605,33 @@ def generate_with_context(
         for entry in recent_history:
             role = entry.get("role", "user")
             content = entry.get("content", "")
-            full_prompt_parts.append(f"<|start_header_id|>{role}<|end_header_id|>\n\n{content}<|eot_id|>")
+            role_label = "User" if role == "user" else "Assistant"
+            full_prompt_parts.append(f"{role_label}: {content}\n\n")
     
     # Add current prompt
-    full_prompt_parts.append(f"<|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|>")
-    full_prompt_parts.append("<|start_header_id|>assistant<|end_header_id|>\n\n")
+    full_prompt_parts.append(f"User: {prompt}\n\nAssistant:")
     
     full_prompt = "".join(full_prompt_parts)
+    
+    # Add stop tokens to prevent model from outputting special tokens and continuing
+    stop_sequences = [
+        "\nUser:",
+        "\nuser:",  
+        "\nSystem:",
+        "\nsystem:",
+        "<|eot_id|>",
+        "<|end_of_text|>",
+        "<|im_end|>",
+        "<|end_header_id|>",
+        "<|start_header_id|>",
+        "user<|end_header_id|>",
+        "assistant<|end_header_id|>",
+        "system<|end_header_id|>",
+        "\n\n\n"  # Stop on excessive newlines
+    ]
+    
+    # Override kwargs to include stop sequences
+    kwargs['stop'] = stop_sequences
     
     # Generate with provided sampling parameters
     response = generate(
@@ -609,5 +642,31 @@ def generate_with_context(
     if response is None:
         raise RuntimeError("Generation failed")
     
-    return response
+    # Clean up any special tokens that might have slipped through
+    response = response.strip()
+    
+    # Remove all common special tokens
+    special_tokens = [
+        "<|eot_id|>",
+        "<|end_of_text|>", 
+        "<|im_end|>",
+        "<|begin_of_text|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|im_start|>",
+        "[INST]",
+        "[/INST]",
+        "<<SYS>>",
+        "<</SYS>>"
+    ]
+    
+    for token in special_tokens:
+        response = response.replace(token, "")
+    
+    # Also remove any remaining angle bracket patterns that look like tokens
+    import re
+    response = re.sub(r'<\|[^>]+\|>', '', response)
+    response = re.sub(r'<[^>]+>', '', response)
+    
+    return response.strip()
 
