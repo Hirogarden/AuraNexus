@@ -53,12 +53,14 @@ function App() {
   
   // Handle mode switching
   const handleModeChange = async (newMode) => {
+    console.log('🔄 Switching mode to:', newMode);
     try {
-      await invoke('switch_mode', { mode: newMode });
+      const result = await invoke('switch_mode', { newMode: newMode });
+      console.log('✅ Mode switched successfully:', result);
       setCurrentMode(newMode);
       setMessages([]); // Clear history when switching modes
     } catch (error) {
-      console.error('Failed to switch mode:', error);
+      console.error('❌ Failed to switch mode:', error);
     }
   };
   

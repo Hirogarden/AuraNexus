@@ -1,25 +1,30 @@
 """
 In-Process LLM Manager
 Loads models directly into Python process using llama-cpp-python
-No external servers, fully self-contained, HIPAA-compliant
+No external servers, fully self-contained
 
-⚠️ SECURITY: HIPAA COMPLIANCE CRITICAL
+⚠️ PRIVACY: All inference happens locally with no network calls
 This module ensures all LLM inference happens in-process without external 
-network calls. Protected Health Information (PHI) stays in application memory.
+network calls. User data stays in application memory.
 
 NEVER modify this to:
 - Call external APIs (OpenAI, Anthropic, etc.)
 - Write unencrypted data to disk
-- Send data over network
-- Log user messages/PHI
+- Send data over network without explicit user consent
+- Log user messages/data
 
-See HIPAA_COMPLIANCE.md section "Transmission Security" for requirements.
+User's model path:
 """
+DEFAULT_MODEL_PATH = r"C:\Users\hirog\OneDrive\Desktop\4. Models\Llama-3.1-8B-Lexi-Uncensored-V2-Q8_0.gguf"
 
 import logging
 import os
 from typing import Optional, Dict
 from pathlib import Path
+
+print("=" * 60, flush=True)
+print("[PYTHON] llm_manager.py MODULE IMPORTED!", flush=True)
+print("=" * 60, flush=True)
 
 logger = logging.getLogger(__name__)
 
@@ -205,9 +210,30 @@ def generate(
     Returns:
         Generated text or None if model not loaded
     """
+    global _llm_instance
+    
+    # Auto-load model if not loaded
     if _llm_instance is None:
-        logger.warning("No model loaded, cannot generate")
-        return None
+        logger.info("Model not loaded, attempting auto-load...")
+        if os.path.exists(DEFAULT_MODEL_PATH):
+            logger.info(f"Loading model from: {DEFAULT_MODEL_PATH}")
+            success = load_model(DEFAULT_MODEL_PATH, n_ctx=4096, n_gpu_layers=33)
+            if not success:
+                logger.error("Failed to auto-load model")
+                # Return mock response for testing
+                mock_responses = [
+                    "Hello! I'm AuraNexus running in test mode. The model hasn't been loaded yet, but the UI and backend are connected properly!",
+                    "The UI looks great! Everything is connected properly. Once a language model is loaded, I'll be able to have real conversations with you.",
+                    "I can see your messages are reaching me through the Rust → Python bridge successfully!",
+                    "All systems operational! The Tauri frontend, Rust backend, and Python bridge are all working together."
+                ]
+                # Rotate through mock responses based on some state
+                import hashlib
+                response_index = int(hashlib.md5(prompt.encode()).hexdigest(), 16) % len(mock_responses)
+                return mock_responses[response_index]
+        else:
+            logger.error(f"Model not found at: {DEFAULT_MODEL_PATH}")
+            return None
     
     try:
         if stop is None:
@@ -514,19 +540,44 @@ def generate_with_context(
     Returns:
         Generated response text
     """
-    # TEST MODE: Return mock response when no model is loaded
+    global _llm_instance
+    
+    # Auto-load model if not loaded
     if _llm_instance is None:
-        # Provide helpful test responses based on the prompt
-        mock_responses = [
-            "Hello! I'm AuraNexus running in test mode. A language model hasn't been loaded yet, so I'm responding with pre-programmed messages to verify the connection is working.",
-            "The UI looks great! Everything is connected properly. To get real AI responses, you'll need to download a GGUF model file.",
-            "I can see your messages are reaching me through the Rust → Python bridge successfully! Once you load a model, I'll be able to generate real responses.",
-            "All systems operational! The Tauri frontend, Rust backend, and Python bridge are all communicating correctly. Just waiting for a language model to be loaded.",
-        ]
+        logger.info("[AUTO-LOAD] Model not loaded in generate_with_context(), attempting auto-load...")
+        print("[AUTO-LOAD] Model not loaded, attempting auto-load...", flush=True)
         
-        # Rotate through responses or pick based on message count
-        response_index = len(conversation_history) % len(mock_responses) if conversation_history else 0
-        return mock_responses[response_index]
+        if os.path.exists(DEFAULT_MODEL_PATH):
+            logger.info(f"[LOADING] Loading model from: {DEFAULT_MODEL_PATH}")
+            print(f"[LOADING] Loading model from: {DEFAULT_MODEL_PATH}", flush=True)
+            
+            success = load_model(DEFAULT_MODEL_PATH, n_ctx=4096, n_gpu_layers=33)
+            
+            if not success:
+                logger.error("[ERROR] Failed to auto-load model")
+                print("[ERROR] Failed to auto-load model", flush=True)
+                # Return mock response for testing
+                mock_responses = [
+                    "Hello! I'm AuraNexus running in test mode. A language model hasn't been loaded yet, so I'm responding with pre-programmed messages to verify the connection is working.",
+                    "The UI looks great! Everything is connected properly. To get real AI responses, you'll need to download a GGUF model file.",
+                    "I can see your messages are reaching me through the Rust → Python bridge successfully! Once you load a model, I'll be able to generate real responses.",
+                    "All systems operational! The Tauri frontend, Rust backend, and Python bridge are all communicating correctly. Just waiting for a language model to be loaded.",
+                ]
+                # Rotate through responses
+                response_index = len(conversation_history) % len(mock_responses) if conversation_history else 0
+                return mock_responses[response_index]
+            else:
+                logger.info("[SUCCESS] Model loaded successfully!")
+                print("[SUCCESS] Model loaded successfully!", flush=True)
+        else:
+            logger.error(f"[ERROR] Model not found at: {DEFAULT_MODEL_PATH}")
+            print(f"[ERROR] Model not found at: {DEFAULT_MODEL_PATH}", flush=True)
+            # Return error message
+            return "Error: Model file not found. Please check the model path in settings."
+    
+    # If we reach here, model should be loaded
+    if _llm_instance is None:
+        return "Error: Model failed to load properly."
     
     # Build full prompt with context
     full_prompt_parts = []
