@@ -1,6 +1,8 @@
 import logging
 from typing import Dict, Any, Callable, List, Sequence, Iterable
 from core.security import SafeSandbox
+from tools.openclaw_bridge import OpenClawBridge
+from tools.hf_pipelines import HFPipelineRouter
 
 logger = logging.getLogger("AuraNexus.Tools")
 
@@ -81,3 +83,69 @@ class ToolRegistry:
             timeout=timeout,
             allowed_binaries=self.allowed_commands,
         )
+
+    def register_openclaw_skills(self, bridge: OpenClawBridge, auto_discover: bool = True) -> int:
+        """Registers discovered OpenClaw skills as first-class tools in this registry."""
+        if auto_discover:
+            skills = bridge.discover_skills()
+        else:
+            skills = dict(getattr(bridge, "_skills", {}))
+
+        for name, spec in skills.items():
+            schema = {
+                "type": "object",
+                "properties": spec.parameters,
+                "required": list(spec.required),
+            }
+
+            def _executor(_sandbox: SafeSandbox, _name: str = name, **kwargs: Any) -> Dict[str, Any]:
+                return bridge.execute_skill(_name, kwargs)
+
+            self.register_tool(
+                name=name,
+                description=spec.description,
+                parameters=schema,
+                func=_executor,
+            )
+
+        return len(skills)
+
+    def register_hf_pipeline_tool(
+        self,
+        pipeline_router: HFPipelineRouter,
+        tool_name: str = "hf_text_task",
+    ) -> str:
+        """Registers a first-class Hugging Face text pipeline tool in this registry."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "task": {"type": "string"},
+                "text": {"type": "string"},
+                "model": {"type": "string"},
+                "options": {"type": "object"},
+            },
+            "required": ["task", "text"],
+        }
+
+        def _executor(
+            _sandbox: SafeSandbox,
+            task: str,
+            text: str,
+            model: str | None = None,
+            options: Dict[str, Any] | None = None,
+            **_: Any,
+        ) -> Any:
+            return pipeline_router.run_text_task(
+                task=task,
+                text=text,
+                model=model,
+                options=options,
+            )
+
+        self.register_tool(
+            name=tool_name,
+            description="Run an allowlisted Hugging Face text pipeline task.",
+            parameters=schema,
+            func=_executor,
+        )
+        return tool_name
