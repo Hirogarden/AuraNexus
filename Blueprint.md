@@ -3,7 +3,7 @@
 ## 1. Core Mandate
 AuraNexus is a local, consumer-facing application. The AI model must never have raw access to the user's host filesystem or network layer during tool execution. If isolation primitives fail or are missing, the runtime must fail-securely and halt execution immediately.
 
-## 2. Platform-Specific Enforcement (Rust Implementation)
+## 2. Platform-Specific Enforcement
 Instead of a unified Python script that leaks or crashes, the fresh build will compile native platform targets:
 
 - **Linux Targets:** Must enforce hard namespace isolation.
