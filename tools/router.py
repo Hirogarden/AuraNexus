@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, Callable, List
+from typing import Dict, Any, Callable, List, Sequence, Iterable
 from core.security import SafeSandbox
 
 logger = logging.getLogger("AuraNexus.Tools")
@@ -10,8 +10,9 @@ class ToolRegistry:
     Enforces that all tool execution paths are routed through the SafeSandbox.
     """
     
-    def __init__(self, sandbox: SafeSandbox):
+    def __init__(self, sandbox: SafeSandbox, allowed_commands: Iterable[str] | None = None):
         self.sandbox = sandbox
+        self.allowed_commands = frozenset(allowed_commands or ())
         self._tools: Dict[str, Dict[str, Any]] = {}
 
     def register_tool(self, name: str, description: str, parameters: Dict[str, Any], func: Callable[..., Any]) -> None:
@@ -44,6 +45,9 @@ class ToolRegistry:
         """
         if name not in self._tools:
             return {"success": False, "error": f"Tool '{name}' is not registered in AuraNexus."}
+
+        if not isinstance(arguments, dict):
+            return {"success": False, "error": "Tool execution blocked: arguments must be a dictionary."}
             
         try:
             # All tools execute inside the boundaries of our sandbox root folder context
@@ -53,3 +57,27 @@ class ToolRegistry:
         except Exception as e:
             logger.error(f"Execution failure in tool '{name}': {e}")
             return {"success": False, "error": str(e)}
+
+    def execute_command(self, command: Sequence[str], timeout: int = 30) -> Dict[str, Any]:
+        """Executes an allowlisted command in the secure sandbox context."""
+        if not command:
+            return {"success": False, "error": "Tool execution blocked: empty command sequence."}
+
+        binary = str(command[0]).strip()
+        if not self.allowed_commands:
+            return {
+                "success": False,
+                "error": "Tool execution blocked: command allowlist is empty.",
+            }
+
+        if binary not in self.allowed_commands:
+            return {
+                "success": False,
+                "error": f"Tool execution blocked: '{binary}' is not in the command allowlist.",
+            }
+
+        return self.sandbox.execute_isolated_tool(
+            command=command,
+            timeout=timeout,
+            allowed_binaries=self.allowed_commands,
+        )

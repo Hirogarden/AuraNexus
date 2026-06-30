@@ -4,6 +4,8 @@ import math
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
 
+from core.security import SafeSandbox
+
 logger = logging.getLogger("AuraNexus.Storage")
 
 class LocalVectorStore:
@@ -13,8 +15,13 @@ class LocalVectorStore:
     directly to flat files on disk. Perfect for low-spec consumer machines.
     """
     
-    def __init__(self, storage_path: str | Path = "sandbox_workspace/vector_index.json"):
-        self.storage_path = Path(storage_path)
+    def __init__(
+        self,
+        storage_path: str | Path = "vector_index.json",
+        sandbox: SafeSandbox | None = None,
+    ):
+        self.sandbox = sandbox or SafeSandbox()
+        self.storage_path = self.sandbox.sanitize_path(storage_path)
         # In-memory index structure: list of dicts containing {"vector": [...], "text": "...", "metadata": {...}}
         self._index: List[Dict[str, Any]] = []
         self._load_index()
@@ -43,8 +50,20 @@ class LocalVectorStore:
 
     def add_vector(self, vector: List[float], text: str, metadata: Dict[str, Any]) -> None:
         """Inserts a text chunk alongside its vector representation into the database."""
+        if not vector:
+            raise ValueError("Vector cannot be empty.")
+
+        validated_vector: List[float] = []
+        for value in vector:
+            if not isinstance(value, (int, float)):
+                raise ValueError("Vector contains a non-numeric value.")
+            float_value = float(value)
+            if not math.isfinite(float_value):
+                raise ValueError("Vector contains a non-finite value.")
+            validated_vector.append(float_value)
+
         self._index.append({
-            "vector": vector,
+            "vector": validated_vector,
             "text": text,
             "metadata": metadata
         })

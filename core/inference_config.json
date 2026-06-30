@@ -1,0 +1,15 @@
+{
+  "required_ram_buffer_mb": 2048.0,
+  "n_gpu_layers": 0,
+  "ctx_size": 4096,
+  "sampling": {
+    "temperature": 0.8,
+    "max_tokens": 512,
+    "min_p": 0.05,
+    "dry_multiplier": 0.8,
+    "dry_base": 1.75,
+    "dry_allowed_length": 2,
+    "xtc_probability": 0.1,
+    "xtc_threshold": 0.1
+  }
+}
