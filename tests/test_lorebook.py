@@ -51,3 +51,43 @@ def test_phrase_and_fuzzy_triggering() -> None:
 
     assert phrase_card.matches("The Ancient Order gathered at dawn.")
     assert fuzzy_card.matches("The shadow cathedrl stood silent in the valley.")
+
+
+def test_forced_cards_and_scope_filters() -> None:
+    manager = LorebookManager()
+    manager.add_card(
+        StoryCard(
+            id="forced-card",
+            keys=["never-used"],
+            content="Forced context",
+            mode="companion",
+            persona_id="Aura",
+            state_tags=["dialogue"],
+            priority=50,
+        )
+    )
+    manager.add_card(
+        StoryCard(
+            id="story-only",
+            keys=["citadel"],
+            content="Narrative context",
+            mode="storyteller",
+            state_tags=["story"],
+        )
+    )
+
+    manager.set_active_persona("Aura")
+    manager.set_active_state_tags(["dialogue", "companion"])
+    manager.force_card("forced-card")
+    cards = manager.scan_and_retrieve("plain text with no trigger", mode="companion")
+    assert [card.id for card in cards] == ["forced-card"]
+
+    cards_after_clear = manager.scan_and_retrieve("plain text with no trigger", mode="companion")
+    assert cards_after_clear == []
+
+    story_cards = manager.scan_and_retrieve(
+        "The citadel waits.",
+        mode="storyteller",
+        state_tags=["story"],
+    )
+    assert [card.id for card in story_cards] == ["story-only"]

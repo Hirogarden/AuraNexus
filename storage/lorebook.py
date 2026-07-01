@@ -1,7 +1,7 @@
 import re
 from difflib import SequenceMatcher
-from dataclasses import dataclass
-from typing import List, Dict
+from dataclasses import dataclass, field
+from typing import List, Dict, Iterable
 
 
 @dataclass
@@ -18,6 +18,8 @@ class StoryCard:
     enabled: bool = True
     mode: str = "shared"
     fuzzy_threshold: float = 0.88
+    persona_id: str | None = None
+    state_tags: List[str] = field(default_factory=list)
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -81,33 +83,90 @@ class LorebookManager:
     
     def __init__(self):
         self.cards: Dict[str, StoryCard] = {}
+        self.active_persona_id: str | None = None
+        self.active_state_tags: set[str] = set()
+        self._forced_card_ids: set[str] = set()
 
     def add_card(self, card: StoryCard) -> None:
         """Registers a new lore chunk or memory profile into the active book context."""
         self.cards[card.id] = card
+
+    def remove_card(self, card_id: str) -> bool:
+        if card_id not in self.cards:
+            return False
+        del self.cards[card_id]
+        self._forced_card_ids.discard(card_id)
+        return True
+
+    def set_active_persona(self, persona_id: str | None) -> None:
+        self.active_persona_id = persona_id.strip() if isinstance(persona_id, str) and persona_id.strip() else None
+
+    def set_active_state_tags(self, state_tags: Iterable[str] | None) -> None:
+        normalized: set[str] = set()
+        if state_tags is not None:
+            for tag in state_tags:
+                tag_text = str(tag).strip().lower()
+                if tag_text:
+                    normalized.add(tag_text)
+        self.active_state_tags = normalized
+
+    def force_card(self, card_id: str) -> None:
+        if card_id not in self.cards:
+            raise KeyError(f"Unknown lore card '{card_id}'.")
+        self._forced_card_ids.add(card_id)
+
+    def clear_forced_cards(self) -> None:
+        self._forced_card_ids.clear()
+
+    def _card_matches_scope(
+        self,
+        card: StoryCard,
+        mode: str,
+        persona_id: str | None,
+        state_tags: set[str],
+    ) -> bool:
+        if card.mode not in {"shared", mode}:
+            return False
+
+        if card.persona_id is not None and card.persona_id != persona_id:
+            return False
+
+        normalized_card_tags = {str(tag).strip().lower() for tag in card.state_tags if str(tag).strip()}
+        if normalized_card_tags and not normalized_card_tags.intersection(state_tags):
+            return False
+
+        return True
 
     def scan_and_retrieve(
         self,
         context_text: str,
         mode: str = "storyteller",
         max_tokens: int = 2048,
+        persona_id: str | None = None,
+        state_tags: Iterable[str] | None = None,
     ) -> List[StoryCard]:
         """
         Scans recent conversation or narrative prose blocks, finds all matching cards,
         and returns them sorted by priority to prevent context bloating.
         """
+        normalized_persona_id = persona_id if persona_id is not None else self.active_persona_id
+        normalized_state_tags = set(self.active_state_tags)
+        if state_tags is not None:
+            normalized_state_tags = {
+                str(tag).strip().lower() for tag in state_tags if str(tag).strip()
+            }
+
         triggered_cards: List[StoryCard] = []
-        
-        allowed_modes = {"shared", mode}
         for card in self.cards.values():
-            if card.mode not in allowed_modes:
+            if not self._card_matches_scope(card, mode, normalized_persona_id, normalized_state_tags):
                 continue
-            if card.matches(context_text):
+            if card.id in self._forced_card_ids or card.matches(context_text):
                 triggered_cards.append(card)
                 
-        # Sort by priority value descending (lower number = higher importance or vice versa depending on style)
-        # We will treat higher priority numbers as more critical context anchors
-        triggered_cards.sort(key=lambda x: x.priority, reverse=True)
+        triggered_cards.sort(
+            key=lambda card: (card.id in self._forced_card_ids, card.priority),
+            reverse=True,
+        )
 
         if max_tokens <= 0:
             return []
@@ -120,6 +179,7 @@ class LorebookManager:
                 selected_cards.append(card)
                 budget -= estimated_tokens
 
+        self.clear_forced_cards()
         return selected_cards
 
     def format_context_block(self, active_cards: List[StoryCard]) -> str:
@@ -129,7 +189,12 @@ class LorebookManager:
             
         block_lines = ["[Lore & Context Memories Active]:"]
         for card in active_cards:
-            block_lines.append(f"--- ({card.category.upper()}): {card.id} ---")
+            scope_parts = [card.category.upper()]
+            if card.persona_id:
+                scope_parts.append(f"persona={card.persona_id}")
+            if card.state_tags:
+                scope_parts.append(f"states={','.join(card.state_tags)}")
+            block_lines.append(f"--- ({' | '.join(scope_parts)}): {card.id} ---")
             block_lines.append(card.content.strip())
             
         return "\n".join(block_lines) + "\n"
