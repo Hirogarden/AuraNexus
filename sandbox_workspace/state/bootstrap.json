@@ -1,0 +1,74 @@
+{
+  "schema_version": 2,
+  "app_version": "0.2.0",
+  "aura_name": "Aura",
+  "user_name": "User",
+  "sandbox_root": "/home/hiro/AuraNexus/sandbox_workspace",
+  "world_state_path": "/home/hiro/AuraNexus/sandbox_workspace/state/world_state.json",
+  "lorebook_path": "/home/hiro/AuraNexus/sandbox_workspace/state/lorebook.json",
+  "chat_session_dir": "/home/hiro/AuraNexus/sandbox_workspace/sessions/companion",
+  "story_session_dir": "/home/hiro/AuraNexus/sandbox_workspace/sessions/story",
+  "skills_dir": "/home/hiro/AuraNexus/sandbox_workspace/skills",
+  "bootstrap_seed": {
+    "world_facts": [
+      {
+        "key": "aura.name",
+        "value": "Aura",
+        "source": "system",
+        "permanent": true
+      },
+      {
+        "key": "user.name",
+        "value": "User",
+        "source": "system",
+        "permanent": true
+      },
+      {
+        "key": "runtime.privacy_boundary",
+        "value": "All file and tool actions remain inside the sandbox workspace.",
+        "source": "system",
+        "permanent": true
+      }
+    ],
+    "lore_cards": [
+      {
+        "id": "companion-empathy-anchor",
+        "keys": [
+          "overwhelmed",
+          "anxious",
+          "uncertain"
+        ],
+        "content": "Prioritize calm pacing, emotional clarity, and direct reassurance. Ask one grounded follow-up when needed.",
+        "category": "behavior",
+        "priority": 75,
+        "enabled": true,
+        "mode": "companion",
+        "fuzzy_threshold": 0.88,
+        "persona_id": "Aura",
+        "state_tags": [
+          "dialogue",
+          "companion"
+        ]
+      },
+      {
+        "id": "storyteller-continuity-anchor",
+        "keys": [
+          "ruins",
+          "storm",
+          "forest"
+        ],
+        "content": "Maintain continuity, concrete sensory detail, and end each turn on an open moment that invites the next action.",
+        "category": "narrative",
+        "priority": 70,
+        "enabled": true,
+        "mode": "storyteller",
+        "fuzzy_threshold": 0.88,
+        "persona_id": null,
+        "state_tags": [
+          "story",
+          "narrative"
+        ]
+      }
+    ]
+  }
+}

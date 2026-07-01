@@ -1,6 +1,8 @@
+import json
 import re
 from difflib import SequenceMatcher
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import List, Dict, Iterable
 
 
@@ -74,6 +76,42 @@ class StoryCard:
                 return True
         return False
 
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "id": self.id,
+            "keys": list(self.keys),
+            "content": self.content,
+            "category": self.category,
+            "priority": self.priority,
+            "enabled": self.enabled,
+            "mode": self.mode,
+            "fuzzy_threshold": self.fuzzy_threshold,
+            "persona_id": self.persona_id,
+            "state_tags": list(self.state_tags),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Dict[str, object]) -> "StoryCard":
+        keys = payload.get("keys", [])
+        state_tags = payload.get("state_tags", [])
+        if not isinstance(keys, list) or any(not isinstance(item, str) for item in keys):
+            raise ValueError("Invalid lore card payload: 'keys' must be a list of strings.")
+        if not isinstance(state_tags, list) or any(not isinstance(item, str) for item in state_tags):
+            raise ValueError("Invalid lore card payload: 'state_tags' must be a list of strings.")
+
+        return cls(
+            id=str(payload["id"]),
+            keys=list(keys),
+            content=str(payload["content"]),
+            category=str(payload.get("category", "general")),
+            priority=int(payload.get("priority", 10)),
+            enabled=bool(payload.get("enabled", True)),
+            mode=str(payload.get("mode", "shared")),
+            fuzzy_threshold=float(payload.get("fuzzy_threshold", 0.88)),
+            persona_id=(str(payload["persona_id"]) if payload.get("persona_id") is not None else None),
+            state_tags=list(state_tags),
+        )
+
 
 class LorebookManager:
     """
@@ -81,25 +119,74 @@ class LorebookManager:
     Allows AuraNexus to scale its knowledge base dynamically without context-window overflow.
     """
     
-    def __init__(self):
+    SCHEMA_VERSION = 1
+
+    def __init__(self, data_path: str | Path | None = None):
         self.cards: Dict[str, StoryCard] = {}
         self.active_persona_id: str | None = None
         self.active_state_tags: set[str] = set()
         self._forced_card_ids: set[str] = set()
+        self.data_path = Path(data_path) if data_path is not None else None
+        if self.data_path is not None:
+            self._load()
+
+    def _load(self) -> None:
+        if self.data_path is None or not self.data_path.exists():
+            return
+
+        raw = json.loads(self.data_path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError("Invalid lorebook file: top-level payload must be an object.")
+
+        schema_version = raw.get("schema_version")
+        if schema_version != self.SCHEMA_VERSION:
+            raise ValueError(
+                f"Unsupported lorebook schema version: {schema_version}. Expected {self.SCHEMA_VERSION}."
+            )
+
+        cards_raw = raw.get("cards", [])
+        if not isinstance(cards_raw, list):
+            raise ValueError("Invalid lorebook file: 'cards' must be a list.")
+
+        self.cards = {}
+        for item in cards_raw:
+            if not isinstance(item, dict):
+                raise ValueError("Invalid lorebook file: each card must be an object.")
+            card = StoryCard.from_dict(item)
+            self.cards[card.id] = card
+
+        persona_id = raw.get("active_persona_id")
+        self.active_persona_id = str(persona_id).strip() if isinstance(persona_id, str) and persona_id.strip() else None
+
+    def save(self) -> Path | None:
+        if self.data_path is None:
+            return None
+
+        payload = {
+            "schema_version": self.SCHEMA_VERSION,
+            "active_persona_id": self.active_persona_id,
+            "cards": [card.to_dict() for card in self.cards.values()],
+        }
+        self.data_path.parent.mkdir(parents=True, exist_ok=True)
+        self.data_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        return self.data_path
 
     def add_card(self, card: StoryCard) -> None:
         """Registers a new lore chunk or memory profile into the active book context."""
         self.cards[card.id] = card
+        self.save()
 
     def remove_card(self, card_id: str) -> bool:
         if card_id not in self.cards:
             return False
         del self.cards[card_id]
         self._forced_card_ids.discard(card_id)
+        self.save()
         return True
 
     def set_active_persona(self, persona_id: str | None) -> None:
         self.active_persona_id = persona_id.strip() if isinstance(persona_id, str) and persona_id.strip() else None
+        self.save()
 
     def set_active_state_tags(self, state_tags: Iterable[str] | None) -> None:
         normalized: set[str] = set()

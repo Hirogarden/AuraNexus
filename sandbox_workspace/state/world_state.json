@@ -1,0 +1,23 @@
+{
+  "aura.name": {
+    "key": "aura.name",
+    "value": "Aura",
+    "source": "system",
+    "created_at": "2026-07-01T00:03:27.032968",
+    "permanent": true
+  },
+  "user.name": {
+    "key": "user.name",
+    "value": "User",
+    "source": "system",
+    "created_at": "2026-07-01T00:03:27.033167",
+    "permanent": true
+  },
+  "runtime.privacy_boundary": {
+    "key": "runtime.privacy_boundary",
+    "value": "All file and tool actions remain inside the sandbox workspace.",
+    "source": "system",
+    "created_at": "2026-07-01T00:03:27.033320",
+    "permanent": true
+  }
+}

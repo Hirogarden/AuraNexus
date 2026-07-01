@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "active_persona_id": null,
+  "cards": [
+    {
+      "id": "companion-empathy-anchor",
+      "keys": [
+        "overwhelmed",
+        "anxious",
+        "uncertain"
+      ],
+      "content": "Prioritize calm pacing, emotional clarity, and direct reassurance. Ask one grounded follow-up when needed.",
+      "category": "behavior",
+      "priority": 75,
+      "enabled": true,
+      "mode": "companion",
+      "fuzzy_threshold": 0.88,
+      "persona_id": "Aura",
+      "state_tags": [
+        "dialogue",
+        "companion"
+      ]
+    },
+    {
+      "id": "storyteller-continuity-anchor",
+      "keys": [
+        "ruins",
+        "storm",
+        "forest"
+      ],
+      "content": "Maintain continuity, concrete sensory detail, and end each turn on an open moment that invites the next action.",
+      "category": "narrative",
+      "priority": 70,
+      "enabled": true,
+      "mode": "storyteller",
+      "fuzzy_threshold": 0.88,
+      "persona_id": null,
+      "state_tags": [
+        "story",
+        "narrative"
+      ]
+    }
+  ]
+}
