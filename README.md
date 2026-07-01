@@ -6,8 +6,7 @@ AuraNexus is a local-first AI runtime with strict sandbox boundaries, in-process
 
 The launcher entry point is [launcher.py](launcher.py). Use the project virtual environment first.
 
-```bash
-source /home/hiro/AuraNexus/.venv/bin/activate
+
 ```
 
 ### Companion One-Shot
