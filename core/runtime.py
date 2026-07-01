@@ -1,9 +1,12 @@
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Literal, Protocol
+from typing import Any, List, Literal, Optional, Protocol
 
+from core.response_tracker import ResponseTracker
+from core.symbolic_gate import SymbolicGate, ToolAccess
 from storage.chat_session import ChatSession
+from storage.emotional_memory import EmotionalMemory
 from storage.lorebook import LorebookManager
 from storage.story_session import StorySession
 from storage.world_state import WorldState
@@ -39,6 +42,7 @@ class AuraRuntime:
         max_recent_turns: int = 8,
         chat_session_dir: str | Path | None = None,
         story_session_dir: str | Path | None = None,
+        emotional_memory_dir: str | Path | None = None,
     ) -> None:
         if mode not in {"companion", "storyteller"}:
             raise ValueError("Mode must be either 'companion' or 'storyteller'.")
@@ -60,6 +64,15 @@ class AuraRuntime:
             self.chat_session_dir.mkdir(parents=True, exist_ok=True)
         if self.story_session_dir is not None:
             self.story_session_dir.mkdir(parents=True, exist_ok=True)
+
+        # Intent classifier and anti-repetition tracker — zero deps, always active.
+        self.symbolic_gate = SymbolicGate()
+        self.response_tracker = ResponseTracker()
+
+        # Emotional memory — only created when a writable path is provided.
+        self.emotional_memory: Optional[EmotionalMemory] = None
+        if emotional_memory_dir is not None:
+            self.emotional_memory = EmotionalMemory(base_path=emotional_memory_dir)
 
     def _chat_session_path(self, session_id: str) -> Path:
         if self.chat_session_dir is None:
@@ -202,24 +215,40 @@ class AuraRuntime:
 
         tool_schemas = self.get_tool_schemas()
         tool_names = [schema.get("function", {}).get("name", "") for schema in tool_schemas]
+
+        # Ask the SymbolicGate what this message needs.
+        decision = self.symbolic_gate.decide(user_input, tools_enabled=bool(tool_names))
+
         tools_block = ""
-        if tool_names:
+        if not decision.blocks_tools() and tool_names:
             filtered_names = ", ".join(name for name in tool_names if name)
             if filtered_names:
                 tools_block = f"[Available tools]\n{filtered_names}"
 
         persona = (
             f"You are {self.aura_name}, a reflective local AI companion. "
-            f"Respond directly to {self.user_name} and keep companion context separate from story context."
+            f"Respond directly to {self.user_name} in one focused reply. "
+            f"Do not simulate the conversation continuing after your reply."
         )
 
         sections = [persona]
+
+        # Emotional context just after the persona.
+        if self.emotional_memory is not None:
+            emo_block = self.emotional_memory.get_context_block()
+            if emo_block:
+                sections.append(emo_block)
+
         if world_block:
             sections.append(world_block)
         if lore_block:
             sections.append(lore_block.strip())
         if tools_block:
             sections.append(tools_block)
+
+        # Anti-repetition cues immediately before the conversation history.
+        sections.append(self.response_tracker.as_prompt_block())
+
         if history_lines:
             sections.append("\n".join(history_lines))
         sections.append(f"{self.user_name}: {user_input}")
@@ -274,6 +303,17 @@ class AuraRuntime:
         if self.active_chat_session is not None:
             self.active_chat_session.add_turn(user_input, assistant_response)
             self.save_active_chat_session()
+
+        # Record response for anti-repetition tracking.
+        self.response_tracker.record(assistant_response)
+
+        # Update emotional memory if configured.
+        if self.emotional_memory is not None:
+            self.emotional_memory.process_turn(
+                user_message=user_input,
+                assistant_response=assistant_response,
+                user_name=self.user_name,
+            )
 
     @staticmethod
     def strip_response_cue(prompt: str, speaker: str) -> str:

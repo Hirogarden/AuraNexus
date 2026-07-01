@@ -9,6 +9,7 @@ from modes.companion import CompanionMode, CompanionTurnResult
 from modes.storyteller import StoryTurnResult, StorytellerMode
 from storage.lorebook import LorebookManager
 from storage.world_state import WorldState
+from tools.executor import dispatch as _tool_dispatch, SKILL_SCHEMAS
 from tools.hf_pipelines import HFPipelineRouter
 from tools.openclaw_bridge import OpenClawBridge
 from tools.router import ToolRegistry
@@ -100,6 +101,16 @@ class AuraNexusApp:
         self.tool_registry.register_openclaw_skills(self.openclaw_bridge, auto_discover=True)
         self.hf_pipeline_router = HFPipelineRouter(sandbox=self.sandbox, pipeline_factory=pipeline_factory)
         self.tool_registry.register_hf_pipeline_tool(self.hf_pipeline_router)
+        # Register built-in sandboxed skills (web_search, read_file, etc.)
+        for schema in SKILL_SCHEMAS:
+            fn_def = schema["function"]
+            action_name = fn_def["name"]
+            self.tool_registry.register_tool(
+                name=action_name,
+                description=fn_def["description"],
+                parameters=fn_def["parameters"],
+                func=lambda sb, _a=action_name, **kw: _tool_dispatch(_a, kw),
+            )
         self.runtime = AuraRuntime(
             inference_engine=self.inference_engine,
             lorebook=self.lorebook,
@@ -109,6 +120,7 @@ class AuraNexusApp:
             user_name=user_name,
             chat_session_dir=self.sandbox.sanitize_path("sessions/companion"),
             story_session_dir=self.sandbox.sanitize_path("sessions/story"),
+            emotional_memory_dir=self.sandbox.sanitize_path("memory/emotional"),
         )
         self._apply_bootstrap_seed(aura_name=aura_name, user_name=user_name)
         self.companion_mode = CompanionMode(self.runtime)

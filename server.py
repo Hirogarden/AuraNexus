@@ -51,6 +51,7 @@ _vector_store: Optional[LocalVectorStore] = None
 _model_loaded: bool = False
 _inference_lock: Optional[asyncio.Lock] = None
 _executor = ThreadPoolExecutor(max_workers=2)
+_abort_event = threading.Event()  # set by POST /api/abort; cleared at start of each inference
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -105,6 +106,67 @@ def _embed_text(text: str, dim: int = 128) -> List[float]:
     return [v / norm for v in freq]
 
 
+# ── Stop-sequence streaming ───────────────────────────────────────────────────
+
+def _stopping_wrap(gen: Iterator[str], stop_sequences: List[str]) -> Iterator[str]:
+    """
+    Wraps a token generator and halts emission when any stop sequence appears
+    in the accumulated output, discarding everything from the stop point onward.
+
+    Handles stop sequences that straddle token boundaries by maintaining a
+    rolling tail buffer for lookback.
+    """
+    if not stop_sequences:
+        yield from gen
+        return
+
+    acc = ""
+    CHECK_TAIL = 160  # chars to scan at the end of the running buffer
+
+    for token in gen:
+        acc += token
+        tail_start = max(0, len(acc) - CHECK_TAIL)
+        tail = acc[tail_start:]
+
+        cut = -1
+        for seq in stop_sequences:
+            pos = tail.find(seq)
+            if pos >= 0:
+                cut = tail_start + pos
+                break
+
+        if cut >= 0:
+            # Emit only the clean prefix of this token, if any.
+            already_emitted = len(acc) - len(token)
+            good_end = cut - already_emitted
+            if good_end > 0:
+                yield token[:good_end]
+            return
+
+        yield token
+
+
+def _build_stop_sequences(user_name: str, aura_name: str) -> List[str]:
+    """
+    Returns a list of stop sequences that indicate the model has started
+    simulating the conversation continuing beyond its single reply.
+    """
+    stops = [
+        f"\n{user_name}:",
+        f"\n{aura_name}: ",   # model pretending to give a second reply
+        "\nUser:",
+        "\nHuman:",
+        "\nUSER:",
+        "\n[Hidden Inner-Self Reflection",
+        "\n[Hidden reflection",
+        "\n[INST]",
+        "\n### Human:",
+        "\n<|user|>",
+        "\n<human>:",
+    ]
+    return list(dict.fromkeys(stops))  # deduplicate while preserving order
+
+
 # ── Streaming helper ───────────────────────────────────────────────────────────
 
 async def _stream_tokens(ws: WebSocket, token_gen: Iterator[str]) -> str:
@@ -112,6 +174,9 @@ async def _stream_tokens(ws: WebSocket, token_gen: Iterator[str]) -> str:
     Runs a synchronous llama.cpp character-generator in a thread pool executor
     and pushes each token to the WebSocket as a JSON frame.  Returns the full
     concatenated text once the generator is exhausted.
+
+    Respects _abort_event: if it is set mid-stream, generation is cut short and
+    an 'aborted' frame is sent to the client.
     """
     queue: asyncio.Queue[Optional[str]] = asyncio.Queue(maxsize=1024)
     loop = asyncio.get_event_loop()
@@ -121,6 +186,8 @@ async def _stream_tokens(ws: WebSocket, token_gen: Iterator[str]) -> str:
     def _producer() -> None:
         try:
             for token in token_gen:
+                if _abort_event.is_set():
+                    break
                 loop.call_soon_threadsafe(queue.put_nowait, token)
         except Exception as exc:  # noqa: BLE001
             loop.call_soon_threadsafe(
@@ -134,7 +201,21 @@ async def _stream_tokens(ws: WebSocket, token_gen: Iterator[str]) -> str:
 
     full_parts: List[str] = []
     while True:
-        token = await queue.get()
+        # Poll with a short timeout so we can detect abort between tokens
+        try:
+            token = await asyncio.wait_for(queue.get(), timeout=0.08)
+        except asyncio.TimeoutError:
+            if _abort_event.is_set():
+                # Drain any remaining items the producer may have queued
+                while not queue.empty():
+                    try:
+                        queue.get_nowait()
+                    except Exception:  # noqa: BLE001
+                        pass
+                await ws.send_json({"type": "aborted"})
+                return "".join(full_parts)
+            continue
+
         if token is None:
             break
         if token.startswith(sentinel_error_prefix):
@@ -381,6 +462,24 @@ async def resume_story_session(session_id: str):
     }
 
 
+@web.post("/api/sessions/story/{session_id}/rollback", status_code=200)
+async def rollback_story_beat(session_id: str):
+    """Remove the last story beat (undo last narrator response)."""
+    app = _require_app()
+    if app.runtime.active_story is None or app.runtime.active_story.session_id != session_id:
+        # Try loading it
+        try:
+            app.runtime.load_story_session(session_id)
+        except Exception:
+            raise HTTPException(status_code=404, detail=f"Story session '{session_id}' not found.")
+    story = app.runtime.active_story
+    if not story.beats:
+        raise HTTPException(status_code=400, detail="No beats to roll back.")
+    beat = story.beats.pop()
+    app.runtime.save_active_story()
+    return {"removed_player_action": beat.player_action, "beats_remaining": len(story.beats)}
+
+
 @web.delete("/api/sessions/story/{session_id}", status_code=204)
 async def delete_story_session(session_id: str):
     app = _require_app()
@@ -510,6 +609,41 @@ async def search_memory(req: SearchMemoryRequest):
         for text, meta, score in results
     ]
 
+# ── WorldState facts ───────────────────────────────────────────────────────────
+
+class AssertFactRequest(BaseModel):
+    key: str = Field(min_length=1, max_length=120)
+    value: str = Field(min_length=1, max_length=1000)
+    permanent: bool = Field(default=False)
+
+
+@web.get("/api/worldstate")
+async def get_world_state():
+    app = _require_app()
+    return [f.to_dict() for f in app.runtime.world_state.all_facts()]
+
+
+@web.post("/api/worldstate", status_code=201)
+async def assert_fact(req: AssertFactRequest):
+    app = _require_app()
+    app.runtime.world_state.assert_fact(req.key, req.value, source="user", permanent=req.permanent)
+    return {"key": req.key, "value": req.value, "permanent": req.permanent}
+
+
+@web.delete("/api/worldstate/{fact_key}", status_code=204)
+async def retract_fact(fact_key: str):
+    app = _require_app()
+    ok = app.runtime.world_state.retract_fact(fact_key)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Fact '{fact_key}' not found or is permanent.")
+
+# ── Abort ──────────────────────────────────────────────────────────────────────
+
+@web.post("/api/abort", status_code=204)
+async def abort_generation():
+    """Signal the currently running generation to stop immediately."""
+    _abort_event.set()
+
 
 # ── Skills ─────────────────────────────────────────────────────────────────────
 
@@ -559,7 +693,12 @@ async def ws_companion(ws: WebSocket):
                 name=session_name, restore_latest=restore_latest
             )
 
+            _abort_event.clear()
             async with _inference_lock:
+                stop_seqs = _build_stop_sequences(
+                    app.runtime.user_name, app.runtime.aura_name
+                )
+
                 # Phase 1: hidden inner reflection
                 await ws.send_json({"type": "start", "phase": "reflection"})
                 context = app.runtime.build_prompt(user_text)
@@ -567,7 +706,11 @@ async def ws_companion(ws: WebSocket):
                     context, user_text
                 )
                 hidden_reflection = await _stream_tokens(
-                    ws, app.runtime.inference_engine.generate(reflection_prompt)
+                    ws,
+                    _stopping_wrap(
+                        app.runtime.inference_engine.generate(reflection_prompt),
+                        stop_seqs,
+                    ),
                 )
 
                 # Phase 2: final response
@@ -576,7 +719,11 @@ async def ws_companion(ws: WebSocket):
                     context, hidden_reflection
                 )
                 raw_response = await _stream_tokens(
-                    ws, app.runtime.inference_engine.generate(final_prompt)
+                    ws,
+                    _stopping_wrap(
+                        app.runtime.inference_engine.generate(final_prompt),
+                        stop_seqs,
+                    ),
                 )
 
             response = app.companion_mode._sanitize_response(raw_response)
@@ -655,11 +802,23 @@ async def ws_story(ws: WebSocket):
                 )
                 continue
 
+            _abort_event.clear()
             async with _inference_lock:
+                stop_seqs = _build_stop_sequences(
+                    app.runtime.user_name, app.runtime.aura_name
+                )
+                if app.runtime.active_story is not None:
+                    player_name = app.runtime.active_story.player_name
+                    stop_seqs.append(f"\n{player_name}:")
+
                 await ws.send_json({"type": "start", "phase": "narration"})
                 context = app.runtime.build_prompt(user_text)
                 response = await _stream_tokens(
-                    ws, app.runtime.inference_engine.generate(context.prompt)
+                    ws,
+                    _stopping_wrap(
+                        app.runtime.inference_engine.generate(context.prompt),
+                        stop_seqs,
+                    ),
                 )
 
             if response.strip():

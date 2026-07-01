@@ -270,6 +270,16 @@ html, body {
 #btn-send:hover { background: var(--accent); }
 #btn-send:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* Stop button — shown only while streaming */
+#btn-stop {
+  height: 42px; min-width: 42px; padding: 0 16px;
+  background: var(--danger); border: none; border-radius: var(--radius);
+  color: #fff; font-size: 18px; cursor: pointer; transition: background .15s;
+  display: none; align-items: center; justify-content: center;
+}
+#btn-stop:hover { background: #ef4444; }
+#btn-stop.visible { display: flex; }
+
 /* Empty state */
 #empty-state {
   flex: 1; display: flex; flex-direction: column;
@@ -438,6 +448,47 @@ html, body {
 }
 #lore-add-form h3 { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
 
+/* ── WorldState panel ──────────────────────────────────────────────────── */
+#worldstate-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.5); z-index: 100;
+}
+#worldstate-overlay.open { display: block; }
+#worldstate-panel {
+  position: fixed; top: 0; left: -400px; width: 400px; height: 100vh;
+  background: var(--bg-sidebar); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  transition: left .25s ease; z-index: 101; overflow: hidden;
+}
+#worldstate-panel.open { left: 0; }
+#worldstate-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  font-size: 15px; font-weight: 600;
+}
+#btn-close-worldstate {
+  width: 28px; height: 28px; border-radius: 6px;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  color: var(--text-mid); font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+#btn-close-worldstate:hover { background: var(--bg-hover); color: var(--text-hi); }
+#worldstate-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.fact-item {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 12px; display: flex; align-items: flex-start; gap: 8px;
+}
+.fact-item-key { font-family: var(--mono); font-size: 11px; color: var(--accent); min-width: 100px; word-break: break-all; }
+.fact-item-value { font-size: 12px; color: var(--text-hi); flex: 1; }
+.fact-item-delete {
+  background: none; border: 1px solid rgba(248,113,113,.3);
+  color: var(--danger); border-radius: 5px; padding: 2px 6px;
+  font-size: 11px; cursor: pointer; transition: background .15s; flex-shrink: 0;
+}
+.fact-item-delete:hover { background: rgba(248,113,113,.1); }
+.fact-permanent { color: var(--text-lo); font-size: 10px; margin-top: 2px; }
+
 /* ── Utilities ─────────────────────────────────────────────────────────── */
 .hidden { display: none !important; }
 .text-danger { color: var(--danger); }
@@ -496,6 +547,8 @@ html, body {
   <main id="main">
     <header id="topbar">
       <span id="session-title">No session selected</span>
+      <button class="topbar-btn" id="btn-rollback" onclick="rollbackBeat()" title="Undo last beat (story mode only)" style="display:none">↩ Undo</button>
+      <button class="topbar-btn" onclick="openWorldState()">🌍 Facts</button>
       <button class="topbar-btn" onclick="openLore()">📚 Lore</button>
       <button class="topbar-btn accent-btn" onclick="openMemory()">🧠 Memory</button>
     </header>
@@ -513,9 +566,40 @@ html, body {
       <div id="input-row">
         <textarea id="msg-input" rows="1" placeholder="Type a message… (Enter to send, Shift+Enter for new line)"></textarea>
         <button id="btn-send" onclick="sendMessage()" title="Send">➤</button>
+        <button id="btn-stop" onclick="stopGeneration()" title="Stop generation">■</button>
       </div>
     </div>
   </main>
+</div>
+
+<!-- ── WorldState (Facts) panel ───────────────────────────────────────── -->
+<div id="worldstate-overlay" onclick="closeWorldState()"></div>
+<div id="worldstate-panel">
+  <div id="worldstate-header">
+    <span>🌍 World Facts</span>
+    <button id="btn-close-worldstate" onclick="closeWorldState()">✕</button>
+  </div>
+  <div id="worldstate-body">
+    <div style="font-size:12px;color:var(--text-lo);margin-bottom:4px">
+      Absolute facts the AI must never contradict. Permanent facts (🔒) cannot be deleted.
+    </div>
+    <div id="facts-add-form" style="border:1px solid var(--border-hi);border-radius:var(--radius);padding:12px;background:var(--bg-input);display:flex;flex-direction:column;gap:8px">
+      <h3 style="font-size:13px;font-weight:600;margin-bottom:2px">Assert Fact</h3>
+      <input type="text" class="panel-input" id="fact-new-key" placeholder="Key (e.g. user.mood)" />
+      <input type="text" class="panel-input" id="fact-new-value" placeholder="Value (e.g. tired but hopeful)" />
+      <div style="display:flex;align-items:center;gap:8px">
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-mid)">
+          <input type="checkbox" id="fact-new-permanent" /> Permanent
+        </label>
+        <button class="panel-btn" style="flex:1" onclick="assertFact()">Add Fact</button>
+      </div>
+      <div id="fact-add-status" style="font-size:12px"></div>
+    </div>
+    <div>
+      <div class="panel-section-title">Current Facts</div>
+      <div id="facts-list" style="display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+  </div>
 </div>
 
 <!-- ── Memory panel ───────────────────────────────────────────────────── -->
@@ -703,6 +787,7 @@ function setMode(mode) {
   document.getElementById('btn-mode-story').className =
     'mode-btn' + (mode === 'story' ? ' active' : '');
   loadSessions();
+  _updateTopbarButtons();
 }
 
 // ── Sessions ───────────────────────────────────────────────────────────────────
@@ -789,6 +874,7 @@ async function resumeSession(sessionId) {
     }
 
     renderSessionList();
+    _updateTopbarButtons();
   } catch (e) {
     alert('Could not load session: ' + e.message);
   }
@@ -915,6 +1001,7 @@ function _doSend(text) {
   S.currentReflection = '';
   S.currentReflectionEl = null;
   document.getElementById('btn-send').disabled = true;
+  document.getElementById('btn-stop').classList.add('visible');
 
   // Build WS payload
   const payload = { message: text };
@@ -1000,6 +1087,12 @@ function _doSend(text) {
       bubble.style.color = 'var(--danger)';
       doneStreaming();
     }
+
+    if (msg.type === 'aborted') {
+      bubble.classList.remove('streaming-cursor');
+      if (!bubble.textContent) bubble.textContent = '[Generation stopped]';
+      doneStreaming();
+    }
   }
 
   function onErr() {
@@ -1026,12 +1119,22 @@ function _doSend(text) {
 function doneStreaming() {
   S.streaming = false;
   document.getElementById('btn-send').disabled = false;
+  document.getElementById('btn-stop').classList.remove('visible');
   document.getElementById('msg-input').focus();
   // Refresh sidebar memory stats quietly
   api('GET', '/api/status').then(s => {
     document.getElementById('sidebar-mem-count').textContent = s.memory?.local_count ?? '–';
     document.getElementById('sidebar-cluster-count').textContent = s.memory?.global_count ?? '–';
   }).catch(() => {});
+}
+
+// ── Stop generation ────────────────────────────────────────────────────────────
+async function stopGeneration() {
+  try {
+    await fetch('/api/abort', { method: 'POST' });
+  } catch (e) {
+    console.warn('Abort request failed:', e);
+  }
 }
 
 // ── Message DOM ────────────────────────────────────────────────────────────────
@@ -1266,6 +1369,102 @@ async function deleteLoreCard(id) {
   } catch (e) {
     alert('Could not delete: ' + e.message);
   }
+}
+
+// ── WorldState panel ───────────────────────────────────────────────────────────
+async function openWorldState() {
+  document.getElementById('worldstate-overlay').classList.add('open');
+  document.getElementById('worldstate-panel').classList.add('open');
+  await refreshWorldState();
+}
+
+function closeWorldState() {
+  document.getElementById('worldstate-overlay').classList.remove('open');
+  document.getElementById('worldstate-panel').classList.remove('open');
+}
+
+async function refreshWorldState() {
+  try {
+    const facts = await api('GET', '/api/worldstate');
+    const list = document.getElementById('facts-list');
+    list.innerHTML = '';
+    if (!facts.length) {
+      list.innerHTML = '<div style="font-size:12px;color:var(--text-lo)">No facts asserted yet.</div>';
+      return;
+    }
+    for (const f of facts) {
+      const div = document.createElement('div');
+      div.className = 'fact-item';
+      div.innerHTML = `
+        <div style="flex:1">
+          <div class="fact-item-key">${esc(f.key)}</div>
+          <div class="fact-item-value">${esc(f.value)}</div>
+          ${f.permanent ? '<div class="fact-permanent">🔒 permanent</div>' : ''}
+        </div>
+        ${!f.permanent ? `<button class="fact-item-delete" onclick="retractFact('${esc(f.key)}')">✕</button>` : ''}`;
+      list.appendChild(div);
+    }
+  } catch (e) {
+    console.warn('WorldState fetch failed:', e);
+  }
+}
+
+async function assertFact() {
+  const key = document.getElementById('fact-new-key').value.trim();
+  const value = document.getElementById('fact-new-value').value.trim();
+  const permanent = document.getElementById('fact-new-permanent').checked;
+  const statusEl = document.getElementById('fact-add-status');
+  if (!key || !value) {
+    statusEl.textContent = 'Key and value are required.';
+    statusEl.className = 'text-danger';
+    return;
+  }
+  statusEl.textContent = 'Adding…'; statusEl.className = '';
+  try {
+    await api('POST', '/api/worldstate', { key, value, permanent });
+    document.getElementById('fact-new-key').value = '';
+    document.getElementById('fact-new-value').value = '';
+    document.getElementById('fact-new-permanent').checked = false;
+    statusEl.textContent = '✓ Fact asserted.'; statusEl.className = 'text-success';
+    await refreshWorldState();
+  } catch (e) {
+    statusEl.textContent = 'Error: ' + e.message; statusEl.className = 'text-danger';
+  }
+}
+
+async function retractFact(key) {
+  if (!confirm(`Retract fact "${key}"?`)) return;
+  try {
+    await api('DELETE', `/api/worldstate/${encodeURIComponent(key)}`);
+    await refreshWorldState();
+  } catch (e) {
+    alert('Could not retract: ' + e.message);
+  }
+}
+
+// ── Story rollback ─────────────────────────────────────────────────────────────
+async function rollbackBeat() {
+  if (!S.activeSession || S.mode !== 'story') return;
+  if (!confirm('Undo the last story beat?')) return;
+  try {
+    const res = await api('POST', `/api/sessions/story/${S.activeSession.session_id}/rollback`);
+    showSystemMessage(`↩ Rolled back: "${res.removed_player_action}" (${res.beats_remaining} beats remain)`);
+    // Remove the last two message rows (user + assistant)
+    const msgs = document.getElementById('messages');
+    const rows = msgs.querySelectorAll('.msg-row:not(.system)');
+    if (rows.length >= 2) {
+      rows[rows.length - 1].remove();
+      rows[rows.length - 2].remove();
+    }
+  } catch (e) {
+    alert('Rollback failed: ' + e.message);
+  }
+}
+
+// Show/hide rollback button based on mode
+function _updateTopbarButtons() {
+  document.getElementById('btn-rollback').style.display =
+    (S.mode === 'story' && S.activeSession) ? '' : 'none';
 }
 
 // ── Input auto-resize ──────────────────────────────────────────────────────────

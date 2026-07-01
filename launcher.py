@@ -83,6 +83,17 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1).")
     serve.add_argument("--port", type=int, default=7860, help="Bind port (default: 7860).")
     serve.add_argument("--open", action="store_true", help="Open the browser automatically on start.")
+    # These mirror the global flags so they can be passed after 'serve' naturally.
+    serve.add_argument("--model-path", default=None, dest="serve_model_path",
+                       help="Path to the GGUF model file.")
+    serve.add_argument("--gpu-layers", type=int, default=None, dest="serve_gpu_layers",
+                       help="Override llama.cpp n_gpu_layers.")
+    serve.add_argument("--ctx-size", type=int, default=None, dest="serve_ctx_size",
+                       help="Override llama.cpp context size.")
+    serve.add_argument("--max-tokens", type=int, default=None, dest="serve_max_tokens",
+                       help="Override generation max_tokens.")
+    serve.add_argument("--cpu-fast", action="store_true", dest="serve_cpu_fast",
+                       help="CPU-optimised profile (lower ctx/tokens, no GPU offload).")
     return parser
 
 
@@ -116,10 +127,25 @@ def run_serve_command(
         output_fn("  Make sure fastapi and uvicorn are installed: pip install fastapi 'uvicorn[standard]'")
         return 1
 
-    resolved_gpu_layers = args.gpu_layers
-    resolved_ctx_size = args.ctx_size
-    resolved_max_tokens = args.max_tokens
-    if args.cpu_fast:
+    # Subcommand-local flags override global flags so that
+    # `launcher.py serve --model-path X` works without needing
+    # the flag before the subcommand name.
+    effective_model_path = getattr(args, "serve_model_path", None) or args.model_path
+    effective_gpu_layers = getattr(args, "serve_gpu_layers", None)
+    if effective_gpu_layers is None:
+        effective_gpu_layers = args.gpu_layers
+    effective_ctx_size = getattr(args, "serve_ctx_size", None)
+    if effective_ctx_size is None:
+        effective_ctx_size = args.ctx_size
+    effective_max_tokens = getattr(args, "serve_max_tokens", None)
+    if effective_max_tokens is None:
+        effective_max_tokens = args.max_tokens
+    effective_cpu_fast = getattr(args, "serve_cpu_fast", False) or args.cpu_fast
+
+    resolved_gpu_layers = effective_gpu_layers
+    resolved_ctx_size = effective_ctx_size
+    resolved_max_tokens = effective_max_tokens
+    if effective_cpu_fast:
         if resolved_gpu_layers is None:
             resolved_gpu_layers = 0
         if resolved_ctx_size is None:
@@ -135,20 +161,20 @@ def run_serve_command(
         threading.Thread(target=_open_browser, daemon=True).start()
 
     output_fn(f"[AuraNexus] Starting web server at http://{args.host}:{args.port}")
-    if not args.model_path:
+    if not effective_model_path:
         output_fn("[WARN] No --model-path provided. Inference will be unavailable. UI and memory features will work.")
 
     server_mod.start_server(
         host=args.host,
         port=args.port,
-        model=args.model_path,
+        model=effective_model_path,
         workspace=args.workspace_dir,
         aura_name=args.aura_name,
         user_name=args.user_name,
         gpu_layers=resolved_gpu_layers,
         ctx_size=resolved_ctx_size,
         max_tokens=resolved_max_tokens,
-        cpu_fast=args.cpu_fast,
+        cpu_fast=effective_cpu_fast,
     )
     return 0
 
