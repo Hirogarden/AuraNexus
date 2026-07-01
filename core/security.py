@@ -101,6 +101,9 @@ class SafeSandbox:
         if not command:
             raise SecurityViolationError("Execution blocked: empty command sequence.")
 
+        if any(not isinstance(item, str) for item in command):
+            raise SecurityViolationError("Execution blocked: command entries must all be strings.")
+
         binary = str(command[0]).strip()
         if not binary:
             raise SecurityViolationError("Execution blocked: empty executable name.")
@@ -108,6 +111,19 @@ class SafeSandbox:
         if "/" in binary or "\\" in binary:
             raise SecurityViolationError(
                 "Execution blocked: executable must be a bare binary name, not a filesystem path."
+            )
+
+        blocked_host_handoff = {
+            "xdg-open",
+            "open",
+            "start",
+            "cmd",
+            "powershell",
+            "pwsh",
+        }
+        if binary.lower() in blocked_host_handoff:
+            raise SecurityViolationError(
+                f"Execution blocked: host hand-off binary '{binary}' is forbidden in sandbox mode."
             )
 
         allowlist = frozenset(allowed_binaries) if allowed_binaries is not None else self.allowed_binaries

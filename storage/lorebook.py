@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Dict, Iterable
 
+from core.security import SafeSandbox
+
 
 @dataclass
 class StoryCard:
@@ -22,6 +24,35 @@ class StoryCard:
     fuzzy_threshold: float = 0.88
     persona_id: str | None = None
     state_tags: List[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.id, str) or not self.id.strip():
+            raise ValueError("StoryCard.id must be a non-empty string.")
+        self.id = self.id.strip()
+
+        if not isinstance(self.content, str) or not self.content.strip():
+            raise ValueError("StoryCard.content must be a non-empty string.")
+        self.content = self.content.strip()
+
+        if not isinstance(self.keys, list) or not self.keys:
+            raise ValueError("StoryCard.keys must be a non-empty list of strings.")
+
+        cleaned_keys: List[str] = []
+        for key in self.keys:
+            key_text = str(key).strip()
+            if not key_text:
+                raise ValueError("StoryCard keys cannot contain empty values.")
+            if len(key_text) > 80:
+                raise ValueError("StoryCard key length must be <= 80 characters.")
+            if len(key_text.split()) > 12:
+                raise ValueError("StoryCard key phrases must be <= 12 words.")
+            cleaned_keys.append(key_text)
+        self.keys = cleaned_keys
+
+        if not isinstance(self.fuzzy_threshold, float):
+            self.fuzzy_threshold = float(self.fuzzy_threshold)
+        if self.fuzzy_threshold < 0.7 or self.fuzzy_threshold > 0.99:
+            raise ValueError("StoryCard.fuzzy_threshold must be between 0.7 and 0.99.")
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -69,6 +100,10 @@ class StoryCard:
             return False
 
         normalized_text = self._normalize(text)
+        if not normalized_text:
+            return False
+        if len(normalized_text) > 8000:
+            normalized_text = normalized_text[:8000]
         for key in self.keys:
             if self._phrase_or_token_match(normalized_text, key):
                 return True
@@ -121,12 +156,19 @@ class LorebookManager:
     
     SCHEMA_VERSION = 1
 
-    def __init__(self, data_path: str | Path | None = None):
+    def __init__(
+        self,
+        data_path: str | Path | None = None,
+        sandbox: SafeSandbox | None = None,
+    ):
         self.cards: Dict[str, StoryCard] = {}
         self.active_persona_id: str | None = None
         self.active_state_tags: set[str] = set()
         self._forced_card_ids: set[str] = set()
-        self.data_path = Path(data_path) if data_path is not None else None
+        if data_path is not None and sandbox is not None:
+            self.data_path = sandbox.sanitize_path(data_path)
+        else:
+            self.data_path = Path(data_path) if data_path is not None else None
         if self.data_path is not None:
             self._load()
 
@@ -173,6 +215,8 @@ class LorebookManager:
 
     def add_card(self, card: StoryCard) -> None:
         """Registers a new lore chunk or memory profile into the active book context."""
+        if card.id in self.cards:
+            raise ValueError(f"Lore card '{card.id}' already exists.")
         self.cards[card.id] = card
         self.save()
 

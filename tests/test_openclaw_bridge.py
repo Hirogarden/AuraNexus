@@ -76,3 +76,30 @@ def test_execute_skill_rejects_invalid_arguments(tmp_path: Path) -> None:
 
     with pytest.raises(SkillRegistryError, match="must be numeric"):
         bridge.execute_skill("num_skill", {"value": "oops"})
+
+
+def test_register_skill_schema_rejects_absolute_or_traversal_command_tokens(tmp_path: Path) -> None:
+    sandbox = _StubSandbox(tmp_path)
+    bridge = OpenClawBridge(sandbox=sandbox)
+
+    with pytest.raises(SkillRegistryError, match="absolute command paths"):
+        bridge.register_skill_schema(
+            {
+                "name": "bad_abs",
+                "description": "Invalid absolute path command token",
+                "parameters": {"text": {"type": "string"}},
+                "required": ["text"],
+                "command": ["python3", "/tmp/run.py"],
+            }
+        )
+
+    with pytest.raises(SkillRegistryError, match="traversal operator"):
+        bridge.register_skill_schema(
+            {
+                "name": "bad_rel",
+                "description": "Invalid traversal command token",
+                "parameters": {"text": {"type": "string"}},
+                "required": ["text"],
+                "command": ["python3", "../outside.py"],
+            }
+        )

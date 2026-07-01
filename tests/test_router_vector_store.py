@@ -1,7 +1,10 @@
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
+from storage.lorebook import LorebookManager
 from storage.vector_store import LocalVectorStore
+from storage.world_state import WorldState
 from tools.router import ToolRegistry
 
 
@@ -29,6 +32,89 @@ def test_vector_store_uses_sandbox_path_resolver(tmp_path: Path) -> None:
 
     assert sandbox.last_sanitized == "vectors/index.json"
     assert store.storage_path == tmp_path / "vectors/index.json"
+
+
+def test_vector_store_builds_hirag_layers_and_multi_hop_retrieval(tmp_path: Path) -> None:
+    sandbox = _StubSandbox(tmp_path)
+    store = LocalVectorStore(
+        storage_path="vectors/index.json",
+        sandbox=sandbox,
+        max_cluster_size=2,
+        max_cluster_depth=4,
+    )
+
+    store.add_vector([0.98, 0.02, 0.0], "embers and ash", {"topic": "fire"})
+    store.add_vector([0.95, 0.05, 0.0], "flame lore", {"topic": "fire"})
+    store.add_vector([0.02, 0.97, 0.01], "tidal rites", {"topic": "water"})
+    store.add_vector([0.01, 0.95, 0.04], "river scripture", {"topic": "water"})
+
+    state = store.get_hirag_state()
+    assert state["local_count"] == 4
+    assert state["global_count"] >= 2
+    assert state["bridge_count"] == 4
+
+    results = store.query_hierarchical(query_vector=[1.0, 0.0, 0.0], top_k=2, top_clusters=1)
+    assert len(results) == 2
+    assert results[0][1]["topic"] == "fire"
+    assert results[0][1]["hirag_cluster_id"] is not None
+
+
+def test_vector_store_hirag_round_trip_persists_layers(tmp_path: Path) -> None:
+    sandbox = _StubSandbox(tmp_path)
+    store = LocalVectorStore(storage_path="vectors/index.json", sandbox=sandbox)
+    store.add_vector([1.0, 0.0], "alpha", {"order": 1})
+    store.add_vector([0.0, 1.0], "beta", {"order": 2})
+    store.save_index()
+
+    reloaded = LocalVectorStore(storage_path="vectors/index.json", sandbox=sandbox)
+    state = reloaded.get_hirag_state()
+
+    assert state["local_count"] == 2
+    assert state["global_count"] >= 1
+    assert state["bridge_count"] == 2
+
+    query = reloaded.query_similarity([1.0, 0.0], top_k=1)
+    assert query[0][0] == "alpha"
+    assert query[0][1]["hirag_local_id"] >= 1
+
+
+def test_vector_store_migrates_legacy_flat_index(tmp_path: Path) -> None:
+    sandbox = _StubSandbox(tmp_path)
+    legacy_path = tmp_path / "vectors" / "index.json"
+    legacy_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_path.write_text(
+        json.dumps(
+            [
+                {"vector": [1.0, 0.0], "text": "legacy fire", "metadata": {"topic": "fire"}},
+                {"vector": [0.0, 1.0], "text": "legacy water", "metadata": {"topic": "water"}},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    store = LocalVectorStore(storage_path="vectors/index.json", sandbox=sandbox)
+    state = store.get_hirag_state()
+
+    assert state["local_count"] == 2
+    assert state["bridge_count"] == 2
+    hits = store.query_hierarchical([1.0, 0.0], top_k=1, top_clusters=1)
+    assert hits[0][0] == "legacy fire"
+
+
+def test_world_state_uses_sandbox_path_resolver(tmp_path: Path) -> None:
+    sandbox = _StubSandbox(tmp_path)
+    state = WorldState(data_path="state/world_state.json", sandbox=sandbox)
+
+    assert sandbox.last_sanitized == "state/world_state.json"
+    assert state.data_path == tmp_path / "state/world_state.json"
+
+
+def test_lorebook_uses_sandbox_path_resolver(tmp_path: Path) -> None:
+    sandbox = _StubSandbox(tmp_path)
+    lorebook = LorebookManager(data_path="state/lorebook.json", sandbox=sandbox)
+
+    assert sandbox.last_sanitized == "state/lorebook.json"
+    assert lorebook.data_path == tmp_path / "state/lorebook.json"
 
 
 def test_router_command_allowlist_enforced(tmp_path: Path) -> None:

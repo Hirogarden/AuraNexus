@@ -4,6 +4,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
+from core.security import SafeSandbox
+
 
 @dataclass
 class Fact:
@@ -36,8 +38,12 @@ class Fact:
 class WorldState:
     """Persistent key-value store for absolute facts that prompts must not contradict."""
 
-    def __init__(self, data_path: str | Path = "world_state.json") -> None:
-        self.data_path = Path(data_path)
+    def __init__(
+        self,
+        data_path: str | Path = "world_state.json",
+        sandbox: SafeSandbox | None = None,
+    ) -> None:
+        self.data_path = sandbox.sanitize_path(data_path) if sandbox is not None else Path(data_path)
         self._facts: Dict[str, Fact] = {}
         self._load()
 

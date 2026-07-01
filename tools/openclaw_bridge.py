@@ -40,6 +40,26 @@ class SkillSpec:
             )
         return binary
 
+    @staticmethod
+    def _validate_command_tokens(command: tuple[str, ...]) -> tuple[str, ...]:
+        validated: list[str] = []
+        for token in command:
+            value = str(token).strip()
+            if not value:
+                raise SkillRegistryError("Invalid skill schema: command entries must be non-empty strings.")
+
+            # Permit regular flags, but reject absolute or traversal file references in command tokens.
+            if value.startswith("/"):
+                raise SkillRegistryError(
+                    "Invalid skill schema: absolute command paths are forbidden. Use sandbox-relative paths."
+                )
+            if ".." in Path(value).parts:
+                raise SkillRegistryError(
+                    "Invalid skill schema: traversal operator '..' is forbidden in command tokens."
+                )
+            validated.append(value)
+        return tuple(validated)
+
     @classmethod
     def from_schema(cls, schema: Dict[str, Any]) -> "SkillSpec":
         data = cls._expect_dict(schema, "schema")
@@ -56,7 +76,7 @@ class SkillSpec:
         command_raw = data.get("command")
         if not isinstance(command_raw, list) or not command_raw:
             raise SkillRegistryError("Invalid skill schema: 'command' must be a non-empty list.")
-        command = tuple(str(item) for item in command_raw)
+        command = cls._validate_command_tokens(tuple(str(item) for item in command_raw))
 
         binary = cls._validate_binary_name(command[0])
 

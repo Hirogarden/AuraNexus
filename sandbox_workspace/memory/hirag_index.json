@@ -1,0 +1,11 @@
+{
+  "schema_version": 2,
+  "vector_dim": null,
+  "max_cluster_size": 16,
+  "max_cluster_depth": 6,
+  "next_local_id": 1,
+  "next_cluster_id": 1,
+  "local_nodes": [],
+  "global_clusters": [],
+  "bridge_map": {}
+}

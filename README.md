@@ -18,6 +18,14 @@ python launcher.py \
   --allow-command python3 \
   companion \
   --message "I feel uncertain today."
+
+# CPU fast profile for lighter local turnaround
+python launcher.py \
+  --model-path /absolute/path/to/model.gguf \
+  --allow-command python3 \
+  --cpu-fast \
+  companion \
+  --message "Quick check-in"
 ```
 
 ### Companion Interactive Session
@@ -53,6 +61,20 @@ python launcher.py \
   --allow-command python3 \
   story \
   --session-id story_20260630_120000
+
+### GPU Offload Tuning
+
+```bash
+python launcher.py \
+  --model-path /absolute/path/to/model.gguf \
+  --allow-command python3 \
+  --gpu-layers 20 \
+  --ctx-size 8192 \
+  companion \
+  --message "hello"
+```
+
+Use `--gpu-layers 0` for CPU-only. Use `--gpu-layers -1` to attempt full model offload when your llama.cpp build supports your GPU backend.
 ```
 
 ### List Saved Sessions
@@ -68,7 +90,15 @@ python launcher.py --model-path /absolute/path/to/model.gguf --allow-command pyt
 python launcher.py --no-isolation --allow-command python3 doctor
 ```
 
-The doctor command verifies sandbox state files, registered tools, command allowlist status, and whether a model path is currently configured.
+The doctor command verifies sandbox state files, registered tools, command allowlist status, model path presence, and machine capabilities.
+It now reports:
+
+- detected CPU and RAM profile
+- detected NVIDIA GPUs (when `nvidia-smi` is available)
+- whether installed `llama-cpp-python` supports GPU offload
+- recommended launch profile (`cpu-fast` or GPU-oriented)
+
+This allows AuraNexus installs on different machines to self-check hardware readiness instead of relying on manual per-device assumptions.
 
 ### Install and Run Demo Skill (No Model Load Required)
 

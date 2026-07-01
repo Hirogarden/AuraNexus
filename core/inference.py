@@ -131,7 +131,23 @@ class InferenceEngine:
         self.model: Any = None
         self.config = load_inference_config(config_path)
         self.required_ram_buffer_mb = self.config.required_ram_buffer_mb
+        self._max_tokens_override: int | None = None
+        self._temperature_override: float | None = None
         self._verify_system_resources()
+
+    def set_generation_overrides(
+        self,
+        *,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+    ) -> None:
+        if max_tokens is not None and int(max_tokens) < 1:
+            raise ValueError("max_tokens override must be >= 1")
+        if temperature is not None and float(temperature) < 0.0:
+            raise ValueError("temperature override must be >= 0")
+
+        self._max_tokens_override = None if max_tokens is None else int(max_tokens)
+        self._temperature_override = None if temperature is None else float(temperature)
 
     def _verify_system_resources(self) -> None:
         """
@@ -193,12 +209,10 @@ class InferenceEngine:
 
         signature = inspect.signature(completion_callable)
         required_sampler_args = (
-            "min_p",
-            "dry_multiplier",
-            "dry_base",
-            "dry_allowed_length",
-            "xtc_probability",
-            "xtc_threshold",
+            "prompt",
+            "max_tokens",
+            "temperature",
+            "stream",
         )
 
         supports_kwargs = any(
@@ -213,9 +227,35 @@ class InferenceEngine:
         if missing:
             missing_text = ", ".join(missing)
             raise RuntimeError(
-                "llama_cpp create_completion() does not support required sampler parameters: "
+                "llama_cpp create_completion() does not support required completion parameters: "
                 f"{missing_text}. Upgrade llama-cpp-python to a compatible version."
             )
+
+    def _filter_supported_generation_kwargs(self, generation_kwargs: dict[str, Any]) -> dict[str, Any]:
+        completion_callable = getattr(self.model, "create_completion", None)
+        if completion_callable is None:
+            raise RuntimeError("Loaded model does not expose create_completion().")
+
+        signature = inspect.signature(completion_callable)
+        supports_kwargs = any(
+            parameter.kind == inspect.Parameter.VAR_KEYWORD
+            for parameter in signature.parameters.values()
+        )
+        if supports_kwargs:
+            return generation_kwargs
+
+        filtered_kwargs = {
+            name: value
+            for name, value in generation_kwargs.items()
+            if name in signature.parameters
+        }
+        skipped = sorted(set(generation_kwargs) - set(filtered_kwargs))
+        if skipped:
+            logger.warning(
+                "Skipping unsupported llama_cpp sampler parameters: %s",
+                ", ".join(skipped),
+            )
+        return filtered_kwargs
 
     def generate(self, prompt: str) -> Generator[str, None, None]:
         """
@@ -230,8 +270,16 @@ class InferenceEngine:
 
         generation_kwargs = {
             "prompt": prompt,
-            "max_tokens": sampling.max_tokens,
-            "temperature": sampling.temperature,
+            "max_tokens": (
+                self._max_tokens_override
+                if self._max_tokens_override is not None
+                else sampling.max_tokens
+            ),
+            "temperature": (
+                self._temperature_override
+                if self._temperature_override is not None
+                else sampling.temperature
+            ),
             "stream": True,
             "min_p": sampling.min_p,
             "dry_multiplier": sampling.dry_multiplier,
@@ -240,6 +288,7 @@ class InferenceEngine:
             "xtc_probability": sampling.xtc_probability,
             "xtc_threshold": sampling.xtc_threshold,
         }
+        generation_kwargs = self._filter_supported_generation_kwargs(generation_kwargs)
 
         try:
             response_stream = self.model.create_completion(**generation_kwargs)

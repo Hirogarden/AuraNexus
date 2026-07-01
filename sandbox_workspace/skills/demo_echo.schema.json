@@ -1,0 +1,20 @@
+{
+  "name": "demo_echo",
+  "description": "Echoes input text from sandbox payload for integration testing.",
+  "parameters": {
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "command": [
+    "python3",
+    "skill_tools/echo_demo.py"
+  ],
+  "allowed_binaries": [
+    "python3"
+  ],
+  "timeout": 30
+}

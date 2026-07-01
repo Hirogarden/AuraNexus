@@ -1,4 +1,5 @@
 from storage.lorebook import LorebookManager, StoryCard
+import pytest
 
 
 def test_mode_separation_and_shared_cards() -> None:
@@ -91,3 +92,27 @@ def test_forced_cards_and_scope_filters() -> None:
         state_tags=["story"],
     )
     assert [card.id for card in story_cards] == ["story-only"]
+
+
+def test_story_card_enforces_key_and_threshold_constraints() -> None:
+    with pytest.raises(ValueError, match="fuzzy_threshold"):
+        StoryCard(
+            id="bad-threshold",
+            keys=["valid key"],
+            content="content",
+            fuzzy_threshold=0.2,
+        )
+
+    with pytest.raises(ValueError, match="<= 12 words"):
+        StoryCard(
+            id="bad-key",
+            keys=["one two three four five six seven eight nine ten eleven twelve thirteen"],
+            content="content",
+        )
+
+
+def test_lorebook_rejects_duplicate_card_ids() -> None:
+    manager = LorebookManager()
+    manager.add_card(StoryCard(id="dup", keys=["a"], content="first"))
+    with pytest.raises(ValueError, match="already exists"):
+        manager.add_card(StoryCard(id="dup", keys=["b"], content="second"))

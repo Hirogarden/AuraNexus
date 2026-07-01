@@ -49,3 +49,14 @@ def test_non_linux_platforms_fail_closed(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
     with pytest.raises(SecurityInitializationError):
         SafeSandbox(workspace_dir=tmp_path / "sandbox_workspace", require_isolation=True)
+
+
+def test_execute_isolated_tool_blocks_host_handoff_binary(tmp_path: Path) -> None:
+    sandbox = SafeSandbox(workspace_dir=tmp_path / "sandbox_workspace", require_isolation=False)
+
+    with pytest.raises(SecurityViolationError, match="host hand-off binary"):
+        sandbox.execute_isolated_tool(
+            command=["xdg-open", "payload.txt"],
+            timeout=1,
+            allowed_binaries={"xdg-open"},
+        )

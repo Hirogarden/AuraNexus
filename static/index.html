@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AuraNexus</title>
+<style>
+/* ── Design tokens ─────────────────────────────────────────────────────── */
+:root {
+  --bg-root:     #0d0f1a;
+  --bg-sidebar:  #111422;
+  --bg-main:     #0d0f1a;
+  --bg-input:    #181b2e;
+  --bg-elevated: #1c2038;
+  --bg-hover:    #232749;
+  --bg-active:   #2a2f5a;
+  --accent:      #818cf8;
+  --accent-dim:  #4f46e5;
+  --accent-glow: rgba(129,140,248,.18);
+  --text-hi:     #e2e8f0;
+  --text-mid:    #94a3b8;
+  --text-lo:     #4b5a72;
+  --border:      #1e2442;
+  --border-hi:   #2d3670;
+  --msg-user-bg: #1b2040;
+  --msg-ai-bg:   #151829;
+  --danger:      #f87171;
+  --success:     #34d399;
+  --warn:        #fbbf24;
+  --tag-bg:      #1e2d47;
+  --tag-text:    #7dd3fc;
+  --radius:      10px;
+  --radius-lg:   16px;
+  --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%; width: 100%;
+  font-family: var(--font);
+  background: var(--bg-root);
+  color: var(--text-hi);
+  overflow: hidden;
+}
+
+/* ── Layout ────────────────────────────────────────────────────────────── */
+#app { display: flex; height: 100vh; width: 100vw; }
+
+/* Sidebar */
+#sidebar {
+  width: 260px; min-width: 260px;
+  display: flex; flex-direction: column;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+
+#sidebar-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 18px 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+#logo-icon {
+  width: 30px; height: 30px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dim) 100%);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 700; color: #fff; flex-shrink: 0;
+  box-shadow: 0 0 16px var(--accent-glow);
+}
+
+#app-title { font-size: 15px; font-weight: 600; letter-spacing: .3px; }
+#app-version { font-size: 10px; color: var(--text-lo); margin-left: auto; }
+
+/* Mode toggle */
+#mode-section { padding: 12px 12px 0; }
+#mode-label { font-size: 10px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-lo); margin-bottom: 6px; padding: 0 4px; }
+#mode-toggle {
+  display: flex; background: var(--bg-elevated); border-radius: var(--radius);
+  padding: 3px; gap: 2px; border: 1px solid var(--border);
+}
+.mode-btn {
+  flex: 1; padding: 6px 0; border: none; border-radius: 7px;
+  font-size: 12px; font-weight: 500; cursor: pointer;
+  color: var(--text-mid); background: transparent; transition: all .15s;
+}
+.mode-btn.active {
+  background: var(--bg-active); color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+.mode-btn:hover:not(.active) { background: var(--bg-hover); color: var(--text-hi); }
+
+/* Session list */
+#sessions-section { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 10px 12px 0; }
+#sessions-label-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 4px; margin-bottom: 6px;
+}
+#sessions-label { font-size: 10px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-lo); }
+#btn-new-session {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: var(--bg-elevated); border: 1px solid var(--border-hi);
+  color: var(--accent); font-size: 16px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: background .15s;
+}
+#btn-new-session:hover { background: var(--bg-active); }
+
+#session-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+#session-list::-webkit-scrollbar { width: 4px; }
+#session-list::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 4px; }
+
+.session-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: var(--radius);
+  cursor: pointer; transition: background .12s;
+  border: 1px solid transparent;
+}
+.session-item:hover { background: var(--bg-hover); }
+.session-item.active { background: var(--bg-active); border-color: var(--border-hi); }
+.session-icon { font-size: 14px; flex-shrink: 0; }
+.session-name { flex: 1; font-size: 13px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; color: var(--text-hi); }
+.session-delete {
+  opacity: 0; width: 18px; height: 18px; flex-shrink: 0;
+  border: none; background: none; color: var(--danger);
+  cursor: pointer; border-radius: 4px; font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity .15s, background .15s;
+}
+.session-item:hover .session-delete { opacity: 1; }
+.session-delete:hover { background: rgba(248,113,113,.15); }
+
+/* Sidebar footer */
+#sidebar-footer {
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.stat-row { display: flex; align-items: center; justify-content: space-between; }
+.stat-label { font-size: 11px; color: var(--text-lo); }
+.stat-val { font-size: 11px; color: var(--text-mid); font-family: var(--mono); }
+#status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-lo); flex-shrink: 0; }
+#status-dot.loaded { background: var(--success); box-shadow: 0 0 6px var(--success); }
+#status-dot.error { background: var(--danger); }
+
+/* ── Main area ──────────────────────────────────────────────────────────── */
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+#topbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 20px; height: 54px; min-height: 54px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-main);
+}
+
+#session-title {
+  flex: 1; font-size: 15px; font-weight: 600; color: var(--text-hi);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.topbar-btn {
+  height: 34px; padding: 0 14px; border-radius: 8px;
+  border: 1px solid var(--border-hi); background: var(--bg-elevated);
+  color: var(--text-mid); font-size: 13px; cursor: pointer;
+  display: flex; align-items: center; gap: 6px; transition: all .15s;
+  white-space: nowrap;
+}
+.topbar-btn:hover { background: var(--bg-hover); color: var(--text-hi); }
+.topbar-btn.accent-btn { border-color: var(--accent-dim); color: var(--accent); }
+.topbar-btn.accent-btn:hover { background: var(--accent-glow); }
+
+/* Message area */
+#messages {
+  flex: 1; overflow-y: auto; padding: 20px 0;
+  display: flex; flex-direction: column; gap: 2px;
+}
+#messages::-webkit-scrollbar { width: 5px; }
+#messages::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 4px; }
+
+.msg-row {
+  display: flex; padding: 6px 20px; max-width: 100%;
+}
+.msg-row.user { justify-content: flex-end; }
+.msg-row.assistant { justify-content: flex-start; }
+
+.msg-bubble {
+  max-width: 72%; padding: 12px 16px;
+  border-radius: var(--radius-lg); line-height: 1.6;
+  font-size: 14px; white-space: pre-wrap; word-break: break-word;
+}
+.msg-row.user .msg-bubble {
+  background: var(--msg-user-bg);
+  border: 1px solid var(--border-hi);
+  border-bottom-right-radius: 4px;
+  color: var(--text-hi);
+}
+.msg-row.assistant .msg-bubble {
+  background: var(--msg-ai-bg);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+  color: var(--text-hi);
+}
+
+.msg-row.system .msg-bubble {
+  background: transparent; border: none;
+  color: var(--text-lo); font-size: 12px; font-style: italic;
+  max-width: 100%; text-align: center; padding: 4px 0;
+}
+
+/* Streaming cursor */
+.streaming-cursor::after {
+  content: "▋";
+  color: var(--accent);
+  animation: blink .7s step-end infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* Reflection block (collapsed) */
+.reflection-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--text-lo);
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: 20px; padding: 2px 10px; cursor: pointer;
+  margin-bottom: 6px; transition: color .15s;
+}
+.reflection-pill:hover { color: var(--text-mid); }
+.reflection-content {
+  display: none; font-size: 12px; color: var(--text-lo);
+  font-style: italic; background: var(--bg-elevated);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 12px; margin-bottom: 6px; white-space: pre-wrap;
+}
+.reflection-content.open { display: block; }
+
+/* Lore tag row */
+.lore-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.lore-tag {
+  background: var(--tag-bg); color: var(--tag-text);
+  font-size: 10px; border-radius: 12px; padding: 2px 8px;
+  font-family: var(--mono);
+}
+
+/* Input area */
+#input-area {
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-main);
+}
+#input-row { display: flex; gap: 10px; align-items: flex-end; }
+#msg-input {
+  flex: 1; background: var(--bg-input);
+  border: 1px solid var(--border-hi); border-radius: var(--radius);
+  color: var(--text-hi); font-family: var(--font); font-size: 14px;
+  padding: 10px 14px; resize: none; max-height: 140px;
+  outline: none; transition: border-color .15s; line-height: 1.5;
+}
+#msg-input:focus { border-color: var(--accent); }
+#msg-input::placeholder { color: var(--text-lo); }
+#btn-send {
+  height: 42px; min-width: 42px; padding: 0 16px;
+  background: var(--accent-dim); border: none; border-radius: var(--radius);
+  color: #fff; font-size: 18px; cursor: pointer; transition: background .15s;
+  display: flex; align-items: center; justify-content: center;
+}
+#btn-send:hover { background: var(--accent); }
+#btn-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Empty state */
+#empty-state {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px;
+  color: var(--text-lo); font-size: 14px; text-align: center; padding: 40px;
+}
+#empty-state .empty-icon { font-size: 48px; }
+#empty-state h2 { font-size: 18px; font-weight: 600; color: var(--text-mid); }
+
+/* ── Memory panel (slide-over from right) ─────────────────────────────── */
+#memory-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.5); z-index: 100;
+}
+#memory-overlay.open { display: block; }
+
+#memory-panel {
+  position: fixed; top: 0; right: -420px; width: 420px; height: 100vh;
+  background: var(--bg-sidebar);
+  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  transition: right .25s ease; z-index: 101;
+  overflow: hidden;
+}
+#memory-panel.open { right: 0; }
+
+#memory-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  font-size: 15px; font-weight: 600;
+}
+#btn-close-memory {
+  width: 28px; height: 28px; border-radius: 6px;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  color: var(--text-mid); font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+#btn-close-memory:hover { background: var(--bg-hover); color: var(--text-hi); }
+
+#memory-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+#memory-body::-webkit-scrollbar { width: 4px; }
+#memory-body::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 4px; }
+
+.panel-section-title {
+  font-size: 10px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-lo); margin-bottom: 8px;
+}
+
+.stat-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+.stat-card {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 12px;
+}
+.stat-card-val { font-size: 22px; font-weight: 700; color: var(--accent); font-family: var(--mono); }
+.stat-card-label { font-size: 11px; color: var(--text-lo); margin-top: 2px; }
+
+/* Clusters accordion */
+#clusters-list { display: flex; flex-direction: column; gap: 6px; }
+.cluster-card {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+.cluster-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; cursor: pointer; font-size: 12px;
+}
+.cluster-id { font-family: var(--mono); color: var(--accent); font-size: 11px; }
+.cluster-size { color: var(--text-lo); font-size: 11px; }
+
+/* Search / Add forms */
+.panel-form { display: flex; flex-direction: column; gap: 8px; }
+.panel-input {
+  background: var(--bg-input); border: 1px solid var(--border-hi);
+  border-radius: 8px; color: var(--text-hi); font-family: var(--font);
+  font-size: 13px; padding: 8px 12px; outline: none; transition: border-color .15s;
+}
+.panel-input:focus { border-color: var(--accent); }
+.panel-input::placeholder { color: var(--text-lo); }
+.panel-textarea { resize: vertical; min-height: 70px; }
+.panel-btn {
+  padding: 8px 14px; border: none; border-radius: 8px;
+  background: var(--accent-dim); color: #fff; font-size: 13px;
+  cursor: pointer; font-weight: 500; transition: background .15s;
+}
+.panel-btn:hover { background: var(--accent); }
+.panel-btn.secondary {
+  background: var(--bg-elevated); border: 1px solid var(--border-hi);
+  color: var(--text-mid);
+}
+.panel-btn.secondary:hover { background: var(--bg-hover); color: var(--text-hi); }
+
+#search-results { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.search-result-card {
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 12px; font-size: 12px;
+}
+.search-result-score { color: var(--accent); font-family: var(--mono); font-size: 11px; }
+.search-result-text { color: var(--text-hi); margin-top: 4px; white-space: pre-wrap; }
+.search-result-cluster { color: var(--text-lo); font-size: 10px; margin-top: 4px; font-family: var(--mono); }
+
+/* ── Story setup modal ─────────────────────────────────────────────────── */
+#story-modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.65); z-index: 200;
+  align-items: center; justify-content: center;
+}
+#story-modal-overlay.open { display: flex; }
+#story-modal {
+  background: var(--bg-sidebar); border: 1px solid var(--border-hi);
+  border-radius: var(--radius-lg); padding: 24px; width: 440px; max-width: 96vw;
+  display: flex; flex-direction: column; gap: 14px; max-height: 90vh; overflow-y: auto;
+}
+#story-modal h2 { font-size: 16px; font-weight: 700; }
+.story-field { display: flex; flex-direction: column; gap: 4px; }
+.story-field label { font-size: 11px; color: var(--text-mid); font-weight: 500; }
+.story-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+#story-modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+
+/* ── Lore panel ────────────────────────────────────────────────────────── */
+#lore-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.5); z-index: 100;
+}
+#lore-overlay.open { display: block; }
+#lore-panel {
+  position: fixed; top: 0; right: -460px; width: 460px; height: 100vh;
+  background: var(--bg-sidebar); border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  transition: right .25s ease; z-index: 101; overflow: hidden;
+}
+#lore-panel.open { right: 0; }
+#lore-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  font-size: 15px; font-weight: 600;
+}
+#btn-close-lore {
+  width: 28px; height: 28px; border-radius: 6px;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  color: var(--text-mid); font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+#btn-close-lore:hover { background: var(--bg-hover); color: var(--text-hi); }
+#lore-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.lore-card-item {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px;
+}
+.lore-card-id { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+.lore-card-content { font-size: 12px; color: var(--text-hi); margin-top: 4px; white-space: pre-wrap; }
+.lore-card-meta { font-size: 11px; color: var(--text-lo); margin-top: 6px; }
+.lore-card-delete {
+  float: right; background: none; border: 1px solid rgba(248,113,113,.3);
+  color: var(--danger); border-radius: 5px; padding: 2px 8px;
+  font-size: 11px; cursor: pointer; transition: background .15s;
+}
+.lore-card-delete:hover { background: rgba(248,113,113,.1); }
+#lore-add-form {
+  border: 1px solid var(--border-hi); border-radius: var(--radius);
+  padding: 14px; display: flex; flex-direction: column; gap: 8px;
+  background: var(--bg-input);
+}
+#lore-add-form h3 { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+
+/* ── Utilities ─────────────────────────────────────────────────────────── */
+.hidden { display: none !important; }
+.text-danger { color: var(--danger); }
+.text-success { color: var(--success); }
+.text-warn { color: var(--warn); }
+.mt-2 { margin-top: 8px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Sidebar ──────────────────────────────────────────────────────── -->
+  <aside id="sidebar">
+    <div id="sidebar-header">
+      <div id="logo-icon">A</div>
+      <span id="app-title">AuraNexus</span>
+      <span id="app-version">v0.2.0</span>
+    </div>
+
+    <div id="mode-section">
+      <div id="mode-label">Mode</div>
+      <div id="mode-toggle">
+        <button class="mode-btn active" id="btn-mode-companion" onclick="setMode('companion')">💬 Companion</button>
+        <button class="mode-btn" id="btn-mode-story" onclick="setMode('story')">📖 Story</button>
+      </div>
+    </div>
+
+    <div id="sessions-section">
+      <div id="sessions-label-row">
+        <span id="sessions-label">Sessions</span>
+        <button id="btn-new-session" title="New session" onclick="newSession()">+</button>
+      </div>
+      <div id="session-list"></div>
+    </div>
+
+    <div id="sidebar-footer">
+      <div class="stat-row">
+        <span class="stat-label">Model</span>
+        <div style="display:flex;align-items:center;gap:5px">
+          <div id="status-dot"></div>
+          <span class="stat-val" id="status-label">–</span>
+        </div>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Memory nodes</span>
+        <span class="stat-val" id="sidebar-mem-count">–</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">HiRAG clusters</span>
+        <span class="stat-val" id="sidebar-cluster-count">–</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main area ─────────────────────────────────────────────────────── -->
+  <main id="main">
+    <header id="topbar">
+      <span id="session-title">No session selected</span>
+      <button class="topbar-btn" onclick="openLore()">📚 Lore</button>
+      <button class="topbar-btn accent-btn" onclick="openMemory()">🧠 Memory</button>
+    </header>
+
+    <div id="messages">
+      <div id="empty-state">
+        <div class="empty-icon">✨</div>
+        <h2>Welcome to AuraNexus</h2>
+        <p>Select or create a session to get started.<br/>
+        Switch between Companion and Story modes in the sidebar.</p>
+      </div>
+    </div>
+
+    <div id="input-area">
+      <div id="input-row">
+        <textarea id="msg-input" rows="1" placeholder="Type a message… (Enter to send, Shift+Enter for new line)"></textarea>
+        <button id="btn-send" onclick="sendMessage()" title="Send">➤</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ── Memory panel ───────────────────────────────────────────────────── -->
+<div id="memory-overlay" onclick="closeMemory()"></div>
+<div id="memory-panel">
+  <div id="memory-header">
+    <span>🧠 HiRAG Memory</span>
+    <button id="btn-close-memory" onclick="closeMemory()">✕</button>
+  </div>
+  <div id="memory-body">
+    <div>
+      <div class="panel-section-title">Overview</div>
+      <div class="stat-grid" id="mem-stat-grid">
+        <div class="stat-card"><div class="stat-card-val" id="mem-local-count">–</div><div class="stat-card-label">Local Nodes</div></div>
+        <div class="stat-card"><div class="stat-card-val" id="mem-cluster-count">–</div><div class="stat-card-label">Global Clusters</div></div>
+        <div class="stat-card"><div class="stat-card-val" id="mem-bridge-count">–</div><div class="stat-card-label">Bridge Links</div></div>
+        <div class="stat-card"><div class="stat-card-val" id="mem-dim">–</div><div class="stat-card-label">Vector Dim</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel-section-title">Global Clusters</div>
+      <div id="clusters-list"></div>
+    </div>
+
+    <div>
+      <div class="panel-section-title">Search Memory</div>
+      <div class="panel-form">
+        <input type="text" class="panel-input" id="mem-search-query" placeholder="Search query…" />
+        <div style="display:flex;gap:6px">
+          <input type="number" class="panel-input" id="mem-search-topk" value="5" min="1" max="20" style="width:80px" title="Top K results" />
+          <button class="panel-btn" style="flex:1" onclick="searchMemory()">Search</button>
+        </div>
+        <div id="search-results"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel-section-title">Add to Memory</div>
+      <div class="panel-form">
+        <textarea class="panel-input panel-textarea" id="mem-add-text" placeholder="Text to remember…"></textarea>
+        <input type="text" class="panel-input" id="mem-add-tag" placeholder="Optional tag (e.g. character, lore, note)" />
+        <button class="panel-btn" onclick="addMemory()">Add Entry</button>
+        <div id="mem-add-status" style="font-size:12px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Lore panel ─────────────────────────────────────────────────────── -->
+<div id="lore-overlay" onclick="closeLore()"></div>
+<div id="lore-panel">
+  <div id="lore-header">
+    <span>📚 Lorebook</span>
+    <button id="btn-close-lore" onclick="closeLore()">✕</button>
+  </div>
+  <div id="lore-body">
+    <div id="lore-add-form">
+      <h3>Add Lore Card</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <input type="text" class="panel-input" id="lore-new-id" placeholder="Card ID" />
+        <input type="text" class="panel-input" id="lore-new-mode" value="shared" placeholder="Mode (companion/story/shared)" />
+      </div>
+      <input type="text" class="panel-input" id="lore-new-keys" placeholder="Keywords (comma-separated)" />
+      <textarea class="panel-input panel-textarea" id="lore-new-content" placeholder="Lore content…"></textarea>
+      <input type="text" class="panel-input" id="lore-new-category" placeholder="Category (general, behavior, narrative…)" value="general" />
+      <div style="display:flex;gap:6px">
+        <input type="number" class="panel-input" id="lore-new-priority" value="10" min="0" max="100" style="width:80px" title="Priority 0-100" />
+        <button class="panel-btn" style="flex:1" onclick="addLoreCard()">Add Card</button>
+      </div>
+      <div id="lore-add-status" style="font-size:12px"></div>
+    </div>
+    <div>
+      <div class="panel-section-title">Cards in Lorebook</div>
+      <div id="lore-cards-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Story setup modal ──────────────────────────────────────────────── -->
+<div id="story-modal-overlay">
+  <div id="story-modal">
+    <h2>📖 New Story</h2>
+    <div class="story-field">
+      <label>Title *</label>
+      <input type="text" class="panel-input" id="story-title" placeholder="The Ashes of Morrath" />
+    </div>
+    <div class="story-row">
+      <div class="story-field">
+        <label>Genre *</label>
+        <input type="text" class="panel-input" id="story-genre" placeholder="Fantasy" />
+      </div>
+      <div class="story-field">
+        <label>Tone *</label>
+        <input type="text" class="panel-input" id="story-tone" placeholder="Dark, Brooding" />
+      </div>
+    </div>
+    <div class="story-field">
+      <label>Setting *</label>
+      <textarea class="panel-input panel-textarea" id="story-setting" placeholder="A ruined kingdom under constant rain…" style="min-height:60px"></textarea>
+    </div>
+    <div class="story-row">
+      <div class="story-field">
+        <label>Player Name *</label>
+        <input type="text" class="panel-input" id="story-player-name" placeholder="Mira" />
+      </div>
+      <div class="story-field">
+        <label>Character Description</label>
+        <input type="text" class="panel-input" id="story-player-desc" placeholder="A wandering knight" />
+      </div>
+    </div>
+    <div id="story-modal-error" class="text-danger" style="font-size:12px;display:none"></div>
+    <div id="story-modal-footer">
+      <button class="panel-btn secondary" onclick="closeStoryModal()">Cancel</button>
+      <button class="panel-btn" onclick="submitStorySetup()">Start Story</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ── State ──────────────────────────────────────────────────────────────────────
+const S = {
+  mode: 'companion',          // 'companion' | 'story'
+  sessions: [],               // list from API
+  activeSession: null,        // { session_id, name, turns? }
+  streaming: false,
+  modelLoaded: false,
+  auraName: 'Aura',
+  userName: 'Hiro',
+  ws: null,
+  currentReflection: '',
+  currentReflectionEl: null,
+};
+
+// ── API helpers ────────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  if (!r.ok && r.status !== 204) {
+    let detail = r.statusText;
+    try { detail = (await r.json()).detail || detail; } catch {}
+    throw new Error(detail);
+  }
+  if (r.status === 204) return null;
+  return r.json();
+}
+
+// ── Bootstrap ──────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    const status = await api('GET', '/api/status');
+    S.modelLoaded = status.model_loaded;
+    S.auraName = status.aura_name || 'Aura';
+    S.userName = status.user_name || 'Hiro';
+
+    const dot = document.getElementById('status-dot');
+    const lbl = document.getElementById('status-label');
+    if (status.model_loaded) {
+      dot.className = 'loaded';
+      lbl.textContent = 'loaded';
+    } else {
+      dot.className = 'error';
+      lbl.textContent = 'no model';
+    }
+
+    document.getElementById('sidebar-mem-count').textContent =
+      status.memory?.local_count ?? '–';
+    document.getElementById('sidebar-cluster-count').textContent =
+      status.memory?.global_count ?? '–';
+  } catch (e) {
+    console.warn('Status fetch failed:', e);
+  }
+
+  await loadSessions();
+}
+
+// ── Mode ───────────────────────────────────────────────────────────────────────
+function setMode(mode) {
+  S.mode = mode;
+  document.getElementById('btn-mode-companion').className =
+    'mode-btn' + (mode === 'companion' ? ' active' : '');
+  document.getElementById('btn-mode-story').className =
+    'mode-btn' + (mode === 'story' ? ' active' : '');
+  loadSessions();
+}
+
+// ── Sessions ───────────────────────────────────────────────────────────────────
+async function loadSessions() {
+  const endpoint = S.mode === 'companion'
+    ? '/api/sessions/chat'
+    : '/api/sessions/story';
+  try {
+    S.sessions = await api('GET', endpoint);
+    renderSessionList();
+  } catch (e) {
+    console.warn('Session list fetch failed:', e);
+  }
+}
+
+function renderSessionList() {
+  const el = document.getElementById('session-list');
+  el.innerHTML = '';
+  if (!S.sessions.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--text-lo);padding:8px 6px">No sessions yet</div>';
+    return;
+  }
+  for (const s of S.sessions) {
+    const label = s.name || s.title || s.session_id;
+    const isActive = S.activeSession && S.activeSession.session_id === s.session_id;
+    const div = document.createElement('div');
+    div.className = 'session-item' + (isActive ? ' active' : '');
+    div.dataset.id = s.session_id;
+    div.innerHTML = `
+      <span class="session-icon">${S.mode === 'story' ? '📖' : '💬'}</span>
+      <span class="session-name" title="${esc(label)}">${esc(label)}</span>
+      <button class="session-delete" title="Delete" onclick="deleteSession(event,'${esc(s.session_id)}')">✕</button>
+    `;
+    div.addEventListener('click', (e) => {
+      if (e.target.classList.contains('session-delete')) return;
+      resumeSession(s.session_id);
+    });
+    el.appendChild(div);
+  }
+}
+
+async function newSession() {
+  if (S.mode === 'story') {
+    openStoryModal();
+    return;
+  }
+  const name = prompt('Session name:', `Chat ${new Date().toLocaleDateString()}`);
+  if (!name) return;
+  try {
+    const session = await api('POST', '/api/sessions/chat', { name });
+    S.activeSession = session;
+    clearMessages();
+    updateSessionTitle(session.name);
+    await loadSessions();
+    renderSessionList();
+    showSystemMessage(`New session "${session.name}" created.`);
+  } catch (e) {
+    alert('Could not create session: ' + e.message);
+  }
+}
+
+async function resumeSession(sessionId) {
+  const endpoint = S.mode === 'companion'
+    ? `/api/sessions/chat/${sessionId}`
+    : `/api/sessions/story/${sessionId}`;
+  try {
+    const session = await api('PUT', endpoint);
+    S.activeSession = session;
+    clearMessages();
+    const label = session.name || session.title;
+    updateSessionTitle(label);
+
+    // Replay turns / beats
+    if (S.mode === 'companion' && session.turns) {
+      for (const t of session.turns) {
+        addMessage('user', t.user);
+        addMessage('assistant', t.assistant);
+      }
+    } else if (S.mode === 'story' && session.beats) {
+      for (const b of session.beats) {
+        addMessage('user', b.player);
+        addMessage('assistant', b.narrator);
+      }
+    }
+
+    renderSessionList();
+  } catch (e) {
+    alert('Could not load session: ' + e.message);
+  }
+}
+
+async function deleteSession(e, sessionId) {
+  e.stopPropagation();
+  if (!confirm('Delete this session?')) return;
+  const endpoint = S.mode === 'companion'
+    ? `/api/sessions/chat/${sessionId}`
+    : `/api/sessions/story/${sessionId}`;
+  try {
+    await api('DELETE', endpoint);
+    if (S.activeSession && S.activeSession.session_id === sessionId) {
+      S.activeSession = null;
+      clearMessages();
+      updateSessionTitle('No session selected');
+    }
+    await loadSessions();
+    renderSessionList();
+  } catch (e2) {
+    alert('Could not delete session: ' + e2.message);
+  }
+}
+
+// ── Story modal ────────────────────────────────────────────────────────────────
+function openStoryModal() {
+  document.getElementById('story-modal-overlay').classList.add('open');
+  document.getElementById('story-title').focus();
+}
+
+function closeStoryModal() {
+  document.getElementById('story-modal-overlay').classList.remove('open');
+  document.getElementById('story-modal-error').style.display = 'none';
+}
+
+async function submitStorySetup() {
+  const title = document.getElementById('story-title').value.trim();
+  const genre = document.getElementById('story-genre').value.trim();
+  const tone = document.getElementById('story-tone').value.trim();
+  const setting = document.getElementById('story-setting').value.trim();
+  const playerName = document.getElementById('story-player-name').value.trim();
+  const playerDesc = document.getElementById('story-player-desc').value.trim();
+
+  const errEl = document.getElementById('story-modal-error');
+  if (!title || !genre || !tone || !setting || !playerName) {
+    errEl.textContent = 'Please fill in all required fields.';
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+
+  try {
+    const session = await api('POST', '/api/sessions/story', {
+      title, genre, tone, setting, player_name: playerName, player_desc: playerDesc,
+    });
+    closeStoryModal();
+    S.activeSession = session;
+    clearMessages();
+    updateSessionTitle(session.title);
+    await loadSessions();
+    renderSessionList();
+    showSystemMessage(`Story "${session.title}" started. Enter your first action.`);
+  } catch (e) {
+    errEl.textContent = 'Error: ' + e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+// ── WebSocket ──────────────────────────────────────────────────────────────────
+function wsEndpoint() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const path = S.mode === 'companion' ? '/ws/companion' : '/ws/story';
+  return `${proto}://${location.host}${path}`;
+}
+
+function getOrOpenWS(onMessage, onError) {
+  if (S.ws && S.ws.readyState === WebSocket.OPEN) return S.ws;
+
+  const ws = new WebSocket(wsEndpoint());
+  ws.onmessage = onMessage;
+  ws.onerror = onError;
+  ws.onclose = () => { S.ws = null; };
+  S.ws = ws;
+  return ws;
+}
+
+// ── Send message ───────────────────────────────────────────────────────────────
+function sendMessage() {
+  const input = document.getElementById('msg-input');
+  const text = input.value.trim();
+  if (!text || S.streaming) return;
+
+  if (!S.activeSession) {
+    if (S.mode === 'story') { openStoryModal(); return; }
+    // Auto-create companion session
+    api('POST', '/api/sessions/chat', { name: 'New Conversation' }).then(session => {
+      S.activeSession = session;
+      updateSessionTitle(session.name);
+      loadSessions().then(renderSessionList);
+      _doSend(text);
+    }).catch(e => alert('Could not create session: ' + e.message));
+    input.value = '';
+    autoResize(input);
+    return;
+  }
+
+  input.value = '';
+  autoResize(input);
+  _doSend(text);
+}
+
+function _doSend(text) {
+  if (!S.modelLoaded) {
+    addMessage('user', text);
+    addMessage('system', '⚠ No model loaded. Start the server with --model-path /path/to/model.gguf');
+    return;
+  }
+
+  addMessage('user', text);
+  document.getElementById('empty-state')?.remove();
+
+  S.streaming = true;
+  S.currentReflection = '';
+  S.currentReflectionEl = null;
+  document.getElementById('btn-send').disabled = true;
+
+  // Build WS payload
+  const payload = { message: text };
+  if (S.mode === 'story' && S.activeSession && !S.activeSession._started) {
+    // Inline story start if the story session was just created but first WS turn
+    payload.start_story = {
+      title: S.activeSession.title,
+      genre: S.activeSession.genre,
+      tone: S.activeSession.tone,
+      setting: S.activeSession.setting,
+      player_name: S.activeSession.player_name,
+      player_desc: S.activeSession.player_desc || '',
+    };
+    S.activeSession._started = true;
+  }
+
+  // Create a placeholder AI bubble that will receive streamed tokens
+  const aiRow = createAIRow();
+  document.getElementById('messages').appendChild(aiRow);
+  scrollToBottom();
+
+  const bubble = aiRow.querySelector('.msg-bubble');
+  bubble.classList.add('streaming-cursor');
+
+  let phase = 'reflection';
+
+  function onMsg(e) {
+    const msg = JSON.parse(e.data);
+
+    if (msg.type === 'start') {
+      phase = msg.phase;
+      if (phase === 'response') {
+        // Switch bubble from reflection to response
+        bubble.textContent = '';
+        if (S.currentReflection) {
+          // Insert collapsible reflection pill above bubble
+          const pill = document.createElement('div');
+          pill.className = 'reflection-pill';
+          pill.textContent = '🔮 Inner reflection (click to expand)';
+          const content = document.createElement('div');
+          content.className = 'reflection-content';
+          content.textContent = S.currentReflection;
+          pill.onclick = () => content.classList.toggle('open');
+          aiRow.insertBefore(pill, aiRow.querySelector('.msg-bubble'));
+          aiRow.insertBefore(content, aiRow.querySelector('.msg-bubble'));
+        }
+      }
+      return;
+    }
+
+    if (msg.type === 'token') {
+      if (phase === 'reflection') {
+        S.currentReflection += msg.text;
+        bubble.textContent = S.currentReflection;
+      } else {
+        bubble.textContent += msg.text;
+      }
+      scrollToBottom();
+      return;
+    }
+
+    if (msg.type === 'done') {
+      bubble.classList.remove('streaming-cursor');
+      bubble.textContent = msg.response || bubble.textContent;
+      if (msg.lore_cards && msg.lore_cards.length) {
+        const tags = document.createElement('div');
+        tags.className = 'lore-tags';
+        for (const id of msg.lore_cards) {
+          const tag = document.createElement('span');
+          tag.className = 'lore-tag';
+          tag.textContent = id;
+          tags.appendChild(tag);
+        }
+        aiRow.appendChild(tags);
+      }
+      doneStreaming();
+      return;
+    }
+
+    if (msg.type === 'error') {
+      bubble.classList.remove('streaming-cursor');
+      bubble.textContent = '⚠ ' + msg.message;
+      bubble.style.color = 'var(--danger)';
+      doneStreaming();
+    }
+  }
+
+  function onErr() {
+    bubble.classList.remove('streaming-cursor');
+    bubble.textContent = '⚠ Connection error. Is the server running?';
+    bubble.style.color = 'var(--danger)';
+    doneStreaming();
+  }
+
+  function send() {
+    ws.send(JSON.stringify(payload));
+  }
+
+  const ws = new WebSocket(wsEndpoint());
+  ws.onopen = send;
+  ws.onmessage = onMsg;
+  ws.onerror = onErr;
+  ws.onclose = () => {
+    if (S.streaming) { onErr(); }
+  };
+  S.ws = ws;
+}
+
+function doneStreaming() {
+  S.streaming = false;
+  document.getElementById('btn-send').disabled = false;
+  document.getElementById('msg-input').focus();
+  // Refresh sidebar memory stats quietly
+  api('GET', '/api/status').then(s => {
+    document.getElementById('sidebar-mem-count').textContent = s.memory?.local_count ?? '–';
+    document.getElementById('sidebar-cluster-count').textContent = s.memory?.global_count ?? '–';
+  }).catch(() => {});
+}
+
+// ── Message DOM ────────────────────────────────────────────────────────────────
+function clearMessages() {
+  const el = document.getElementById('messages');
+  el.innerHTML = '';
+  if (!S.activeSession) {
+    el.innerHTML = `
+      <div id="empty-state">
+        <div class="empty-icon">✨</div>
+        <h2>Welcome to AuraNexus</h2>
+        <p>Select or create a session to get started.</p>
+      </div>`;
+  }
+}
+
+function addMessage(role, text) {
+  const el = document.getElementById('messages');
+  document.getElementById('empty-state')?.remove();
+
+  const row = document.createElement('div');
+  row.className = `msg-row ${role}`;
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  bubble.textContent = text;
+  row.appendChild(bubble);
+  el.appendChild(row);
+  scrollToBottom();
+}
+
+function showSystemMessage(text) {
+  const el = document.getElementById('messages');
+  const row = document.createElement('div');
+  row.className = 'msg-row system';
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  bubble.textContent = text;
+  row.appendChild(bubble);
+  el.appendChild(row);
+  scrollToBottom();
+}
+
+function createAIRow() {
+  const row = document.createElement('div');
+  row.className = 'msg-row assistant';
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  row.appendChild(bubble);
+  return row;
+}
+
+function scrollToBottom() {
+  const el = document.getElementById('messages');
+  el.scrollTop = el.scrollHeight;
+}
+
+function updateSessionTitle(name) {
+  document.getElementById('session-title').textContent = name || 'No session selected';
+}
+
+// ── Memory panel ───────────────────────────────────────────────────────────────
+async function openMemory() {
+  document.getElementById('memory-overlay').classList.add('open');
+  document.getElementById('memory-panel').classList.add('open');
+  await refreshMemoryState();
+}
+
+function closeMemory() {
+  document.getElementById('memory-overlay').classList.remove('open');
+  document.getElementById('memory-panel').classList.remove('open');
+}
+
+async function refreshMemoryState() {
+  try {
+    const state = await api('GET', '/api/memory');
+    document.getElementById('mem-local-count').textContent = state.local_count;
+    document.getElementById('mem-cluster-count').textContent = state.global_count;
+    document.getElementById('mem-bridge-count').textContent = state.bridge_count;
+    document.getElementById('mem-dim').textContent = state.vector_dim ?? '–';
+
+    // Update sidebar stats too
+    document.getElementById('sidebar-mem-count').textContent = state.local_count;
+    document.getElementById('sidebar-cluster-count').textContent = state.global_count;
+
+    const list = document.getElementById('clusters-list');
+    list.innerHTML = '';
+    if (!state.clusters || !state.clusters.length) {
+      list.innerHTML = '<div style="font-size:12px;color:var(--text-lo)">No clusters yet. Add memory entries to build the HiRAG index.</div>';
+      return;
+    }
+    for (const c of state.clusters) {
+      const card = document.createElement('div');
+      card.className = 'cluster-card';
+      const nodeCount = (state.bridge_map[c.id] || []).length;
+      card.innerHTML = `
+        <div class="cluster-header">
+          <span class="cluster-id">${esc(c.id)}</span>
+          <span class="cluster-size">${c.size} node${c.size !== 1 ? 's' : ''}</span>
+        </div>`;
+      list.appendChild(card);
+    }
+  } catch (e) {
+    console.warn('Memory state fetch failed:', e);
+  }
+}
+
+async function searchMemory() {
+  const query = document.getElementById('mem-search-query').value.trim();
+  const topK = parseInt(document.getElementById('mem-search-topk').value) || 5;
+  if (!query) return;
+
+  const resultsEl = document.getElementById('search-results');
+  resultsEl.innerHTML = '<div style="font-size:12px;color:var(--text-lo)">Searching…</div>';
+
+  try {
+    const results = await api('POST', '/api/memory/search', { query, top_k: topK, top_clusters: 2 });
+    resultsEl.innerHTML = '';
+    if (!results.length) {
+      resultsEl.innerHTML = '<div style="font-size:12px;color:var(--text-lo)">No results.</div>';
+      return;
+    }
+    for (const r of results) {
+      const card = document.createElement('div');
+      card.className = 'search-result-card';
+      card.innerHTML = `
+        <div class="search-result-score">Score: ${r.score} · Cluster: ${r.cluster_id || '–'}</div>
+        <div class="search-result-text">${esc(r.text)}</div>`;
+      resultsEl.appendChild(card);
+    }
+  } catch (e) {
+    resultsEl.innerHTML = `<div class="text-danger" style="font-size:12px">Error: ${esc(e.message)}</div>`;
+  }
+}
+
+async function addMemory() {
+  const text = document.getElementById('mem-add-text').value.trim();
+  const tag = document.getElementById('mem-add-tag').value.trim();
+  const statusEl = document.getElementById('mem-add-status');
+  if (!text) return;
+
+  statusEl.textContent = 'Adding…';
+  statusEl.className = '';
+  try {
+    const result = await api('POST', '/api/memory/add', {
+      text,
+      metadata: tag ? { tag } : {},
+    });
+    document.getElementById('mem-add-text').value = '';
+    document.getElementById('mem-add-tag').value = '';
+    statusEl.textContent = `✓ Added. Total: ${result.local_count} nodes, ${result.global_count} clusters.`;
+    statusEl.className = 'text-success';
+    await refreshMemoryState();
+  } catch (e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.className = 'text-danger';
+  }
+}
+
+// ── Lore panel ─────────────────────────────────────────────────────────────────
+async function openLore() {
+  document.getElementById('lore-overlay').classList.add('open');
+  document.getElementById('lore-panel').classList.add('open');
+  await refreshLore();
+}
+
+function closeLore() {
+  document.getElementById('lore-overlay').classList.remove('open');
+  document.getElementById('lore-panel').classList.remove('open');
+}
+
+async function refreshLore() {
+  try {
+    const cards = await api('GET', '/api/lorebook');
+    const list = document.getElementById('lore-cards-list');
+    list.innerHTML = '';
+    if (!cards.length) {
+      list.innerHTML = '<div style="font-size:12px;color:var(--text-lo)">No lore cards yet.</div>';
+      return;
+    }
+    for (const c of cards) {
+      const div = document.createElement('div');
+      div.className = 'lore-card-item';
+      div.innerHTML = `
+        <button class="lore-card-delete" onclick="deleteLoreCard('${esc(c.id)}')">Delete</button>
+        <div class="lore-card-id">${esc(c.id)}</div>
+        <div class="lore-card-content">${esc(c.content)}</div>
+        <div class="lore-card-meta">mode: ${esc(c.mode)} · priority: ${c.priority} · keys: ${esc((c.keys || []).join(', '))}</div>`;
+      list.appendChild(div);
+    }
+  } catch (e) {
+    console.warn('Lore fetch failed:', e);
+  }
+}
+
+async function addLoreCard() {
+  const id = document.getElementById('lore-new-id').value.trim();
+  const mode = document.getElementById('lore-new-mode').value.trim() || 'shared';
+  const keysRaw = document.getElementById('lore-new-keys').value.trim();
+  const content = document.getElementById('lore-new-content').value.trim();
+  const category = document.getElementById('lore-new-category').value.trim() || 'general';
+  const priority = parseInt(document.getElementById('lore-new-priority').value) || 10;
+  const statusEl = document.getElementById('lore-add-status');
+
+  if (!id || !keysRaw || !content) {
+    statusEl.textContent = 'ID, keys, and content are required.';
+    statusEl.className = 'text-danger';
+    return;
+  }
+
+  const keys = keysRaw.split(',').map(k => k.trim()).filter(Boolean);
+  statusEl.textContent = 'Adding…';
+  statusEl.className = '';
+  try {
+    await api('POST', '/api/lorebook', { id, keys, content, category, priority, mode, enabled: true });
+    document.getElementById('lore-new-id').value = '';
+    document.getElementById('lore-new-keys').value = '';
+    document.getElementById('lore-new-content').value = '';
+    statusEl.textContent = '✓ Card added.';
+    statusEl.className = 'text-success';
+    await refreshLore();
+  } catch (e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.className = 'text-danger';
+  }
+}
+
+async function deleteLoreCard(id) {
+  if (!confirm(`Delete lore card "${id}"?`)) return;
+  try {
+    await api('DELETE', `/api/lorebook/${encodeURIComponent(id)}`);
+    await refreshLore();
+  } catch (e) {
+    alert('Could not delete: ' + e.message);
+  }
+}
+
+// ── Input auto-resize ──────────────────────────────────────────────────────────
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+}
+
+document.getElementById('msg-input').addEventListener('input', function() {
+  autoResize(this);
+});
+
+document.getElementById('msg-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// ── Story modal keyboard ───────────────────────────────────────────────────────
+document.getElementById('story-modal-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeStoryModal();
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeMemory(); closeLore(); closeStoryModal();
+  }
+});
+
+// ── Utility ───────────────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>

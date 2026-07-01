@@ -101,3 +101,37 @@ def test_storyteller_mode_uses_runtime_prompt_and_records_story(tmp_path: Path) 
     assert "predate the empire" in result.prompt_context.prompt
     assert runtime.active_story is not None
     assert runtime.active_story.beats[0].narrator_response == result.response
+
+
+def test_companion_mode_sanitizes_hidden_reflection_leakage(tmp_path: Path) -> None:
+    engine = _StubInferenceEngine([
+        "Reflect quietly before replying.",
+        "When you answer User, try to reflect on your current emotional state.\n\n"
+        "[hidden reflection:]\n"
+        "Before answering User, think privately about your current emotional state.\n\n"
+        "I can help with that.",
+    ])
+
+    runtime = AuraRuntime(inference_engine=engine, world_state=WorldState(tmp_path / "world.json"))
+    runtime.start_chat_session("Primary")
+    mode = CompanionMode(runtime)
+
+    result = mode.generate_turn("hello")
+    assert "hidden reflection" not in result.response.lower()
+    assert "Before answering User" not in result.response
+    assert "When you answer User" not in result.response
+    assert result.response == "I can help with that."
+
+
+def test_companion_mode_truncates_simulated_dialogue_tail(tmp_path: Path) -> None:
+    engine = _StubInferenceEngine([
+        "Brief reflection.",
+        "I hear you.\nUser: I am feeling sad.\nAura: Tell me more.",
+    ])
+
+    runtime = AuraRuntime(inference_engine=engine, world_state=WorldState(tmp_path / "world.json"))
+    runtime.start_chat_session("Primary")
+    mode = CompanionMode(runtime)
+
+    result = mode.generate_turn("hello")
+    assert result.response == "I hear you."
