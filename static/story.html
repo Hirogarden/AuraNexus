@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AuraNexus – Story Engine</title>
+<style>
+/* ── Design tokens ─────────────────────────────────────────────────────── */
+:root {
+  --bg-root:     #0d0f1a;
+  --bg-sidebar:  #111422;
+  --bg-main:     #0d0f1a;
+  --bg-input:    #181b2e;
+  --bg-elevated: #1c2038;
+  --bg-hover:    #232749;
+  --bg-active:   #2a2f5a;
+  --accent:      #f59e0b;
+  --accent-dim:  #b45309;
+  --accent-glow: rgba(245,158,11,.18);
+  --text-hi:     #e2e8f0;
+  --text-mid:    #94a3b8;
+  --text-lo:     #4b5a72;
+  --border:      #1e2442;
+  --border-hi:   #2d3670;
+  --danger:      #f87171;
+  --success:     #34d399;
+  --warn:        #fbbf24;
+  --radius:      10px;
+  --radius-lg:   16px;
+  --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%; width: 100%;
+  font-family: var(--font);
+  background: var(--bg-root);
+  color: var(--text-hi);
+  overflow: hidden;
+}
+
+/* ── Layout ────────────────────────────────────────────────────────────── */
+#app { display: flex; height: 100vh; width: 100vw; }
+
+/* Sidebar */
+#sidebar {
+  width: 240px; min-width: 240px;
+  display: flex; flex-direction: column;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+
+#sidebar-header {
+  padding: 18px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sidebar-brand {
+  font-size: 13px; font-weight: 700; letter-spacing: .06em;
+  color: var(--accent); text-transform: uppercase;
+}
+.sidebar-sub {
+  font-size: 10px; color: var(--text-lo); margin-top: 2px;
+  display: flex; align-items: center; gap: 4px;
+}
+
+#btn-back-companion {
+  display: block; width: 100%; margin-top: 10px;
+  padding: 7px 10px; border-radius: var(--radius);
+  background: var(--bg-elevated); border: 1px solid var(--border-hi);
+  color: var(--text-mid); font-size: 12px; cursor: pointer;
+  text-align: left;
+}
+#btn-back-companion:hover { background: var(--bg-hover); color: var(--text-hi); }
+
+#sidebar-sessions {
+  flex: 1;
+  display: flex; flex-direction: column;
+  overflow: hidden; padding: 10px 0;
+}
+
+.session-list-label {
+  font-size: 10px; font-weight: 600; color: var(--text-lo);
+  text-transform: uppercase; letter-spacing: .06em;
+  padding: 4px 14px 6px;
+}
+
+#btn-new-story {
+  display: flex; align-items: center; gap: 6px;
+  margin: 0 10px 8px; padding: 7px 10px;
+  border-radius: var(--radius);
+  background: var(--accent-glow); border: 1px solid var(--accent-dim);
+  color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+#btn-new-story:hover { background: var(--accent-dim); color: #fff; }
+
+#session-list { flex: 1; overflow-y: auto; padding: 0 6px; }
+
+.session-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 8px; border-radius: var(--radius);
+  cursor: pointer; font-size: 13px; color: var(--text-mid);
+  transition: background .1s;
+}
+.session-item:hover { background: var(--bg-hover); color: var(--text-hi); }
+.session-item.active { background: var(--bg-active); color: var(--text-hi); }
+.session-icon { flex-shrink: 0; font-size: 14px; }
+.session-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-delete {
+  background: none; border: none; color: var(--text-lo); cursor: pointer;
+  font-size: 13px; padding: 2px 4px; border-radius: 4px; flex-shrink: 0;
+  line-height: 1;
+}
+.session-delete:hover { color: var(--danger); background: rgba(248,113,113,.1); }
+
+#sidebar-footer {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--text-lo);
+  flex-shrink: 0;
+}
+.sidebar-stat { display: flex; justify-content: space-between; margin-bottom: 2px; }
+.sidebar-stat-val { color: var(--text-mid); font-variant-numeric: tabular-nums; }
+
+/* ── Main area ─────────────────────────────────────────────────────────── */
+#main {
+  flex: 1; display: flex; flex-direction: column;
+  overflow: hidden; position: relative;
+}
+
+#topbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 16px; height: 52px; flex-shrink: 0;
+  background: var(--bg-sidebar); border-bottom: 1px solid var(--border);
+}
+
+#story-title-bar {
+  flex: 1; font-size: 14px; font-weight: 600; color: var(--text-hi);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.topbar-btn {
+  background: var(--bg-elevated); border: 1px solid var(--border-hi);
+  color: var(--text-mid); padding: 5px 10px; border-radius: var(--radius);
+  font-size: 12px; cursor: pointer; flex-shrink: 0;
+}
+.topbar-btn:hover { background: var(--bg-hover); color: var(--text-hi); }
+.topbar-btn:disabled { opacity: .4; cursor: default; }
+.accent-btn { border-color: var(--accent-dim); color: var(--accent); }
+
+/* ── Story canvas ──────────────────────────────────────────────────────── */
+#story-canvas {
+  flex: 1; overflow-y: auto;
+  padding: 32px 10%; font-size: 15px; line-height: 1.9;
+  color: var(--text-hi);
+}
+
+@media (max-width: 900px) { #story-canvas { padding: 24px 5%; } }
+
+#story-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; text-align: center; color: var(--text-lo);
+  gap: 12px; user-select: none;
+}
+#story-empty .empty-icon { font-size: 48px; }
+#story-empty h2 { font-size: 20px; color: var(--text-mid); }
+#story-empty p { font-size: 13px; max-width: 340px; }
+
+/* Prose paragraphs from the narrator */
+.story-narrator {
+  margin-bottom: 1.1em;
+  white-space: pre-wrap;
+}
+.story-narrator.streaming-cursor::after {
+  content: '▍';
+  animation: blink .75s step-end infinite;
+  color: var(--accent);
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* Player action lines */
+.story-player {
+  margin: 0.8em 0 1.1em;
+  color: var(--accent);
+  font-style: italic;
+}
+.story-player::before { content: '> '; font-style: normal; font-weight: 700; }
+
+/* System notices */
+.story-system {
+  text-align: center; font-size: 12px;
+  color: var(--text-lo); margin: 0.6em 0;
+  font-style: italic;
+}
+
+/* ── Input area ────────────────────────────────────────────────────────── */
+#input-area {
+  padding: 12px 16px; border-top: 1px solid var(--border);
+  background: var(--bg-sidebar); flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 8px;
+}
+
+#action-prefix {
+  font-size: 14px; font-weight: 700; color: var(--accent);
+  align-self: flex-end; padding-bottom: 4px; flex-shrink: 0;
+}
+
+#input-row { display: flex; gap: 8px; align-items: flex-end; }
+
+#action-input {
+  flex: 1; resize: none; overflow-y: hidden;
+  background: var(--bg-input); border: 1px solid var(--border-hi);
+  border-radius: var(--radius); color: var(--text-hi);
+  font-family: var(--font); font-size: 14px;
+  padding: 9px 12px; line-height: 1.5;
+  min-height: 42px; max-height: 140px;
+  outline: none;
+}
+#action-input:focus { border-color: var(--accent-dim); }
+#action-input::placeholder { color: var(--text-lo); }
+
+.input-btn {
+  flex-shrink: 0; padding: 9px 14px;
+  background: var(--accent-dim); border: none;
+  color: #fff; font-size: 13px; font-weight: 600;
+  border-radius: var(--radius); cursor: pointer;
+  transition: background .15s;
+}
+.input-btn:hover { background: var(--accent); }
+.input-btn:disabled { opacity: .45; cursor: default; }
+
+#btn-stop-story {
+  display: none; padding: 9px 14px;
+  background: var(--bg-elevated); border: 1px solid var(--danger);
+  color: var(--danger); font-size: 13px; font-weight: 600;
+  border-radius: var(--radius); cursor: pointer; flex-shrink: 0;
+}
+#btn-stop-story.visible { display: block; }
+
+/* ── Memory panel ──────────────────────────────────────────────────────── */
+#memory-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.5); z-index: 100;
+}
+#memory-overlay.open { display: block; }
+#memory-panel {
+  position: fixed; top: 0; right: -400px; width: 380px; height: 100vh;
+  background: var(--bg-sidebar); border-left: 1px solid var(--border-hi);
+  display: flex; flex-direction: column;
+  z-index: 101; transition: right .25s ease;
+}
+#memory-panel.open { right: 0; }
+#memory-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+  font-weight: 600; font-size: 14px; flex-shrink: 0;
+}
+#btn-close-memory {
+  background: none; border: none; color: var(--text-lo); cursor: pointer;
+  font-size: 18px; line-height: 1; padding: 0 4px;
+}
+#btn-close-memory:hover { color: var(--text-hi); }
+#memory-body { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 20px; }
+
+.panel-section-title {
+  font-size: 11px; font-weight: 600; color: var(--text-lo);
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px;
+}
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat-card {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 12px;
+}
+.stat-card-val { font-size: 20px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.stat-card-label { font-size: 11px; color: var(--text-lo); margin-top: 2px; }
+
+.panel-form { display: flex; flex-direction: column; gap: 8px; }
+.panel-input {
+  width: 100%; background: var(--bg-input); border: 1px solid var(--border-hi);
+  color: var(--text-hi); border-radius: var(--radius); padding: 7px 10px;
+  font-family: var(--font); font-size: 13px; outline: none;
+}
+.panel-input:focus { border-color: var(--accent-dim); }
+.panel-textarea { min-height: 70px; resize: vertical; }
+.panel-btn {
+  padding: 8px 14px; background: var(--accent-dim); border: none;
+  color: #fff; font-size: 13px; font-weight: 600; border-radius: var(--radius);
+  cursor: pointer;
+}
+.panel-btn:hover { background: var(--accent); }
+.panel-btn.secondary { background: var(--bg-elevated); border: 1px solid var(--border-hi); color: var(--text-mid); }
+.panel-btn.secondary:hover { background: var(--bg-hover); color: var(--text-hi); }
+
+.search-result-card {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 12px; margin-top: 6px;
+}
+.search-result-score { font-size: 10px; color: var(--text-lo); font-family: var(--mono); }
+.search-result-text { color: var(--text-hi); margin-top: 4px; white-space: pre-wrap; font-size: 13px; }
+
+.text-success { color: var(--success); }
+.text-danger { color: var(--danger); }
+
+/* ── Story setup modal ─────────────────────────────────────────────────── */
+#story-modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.65); z-index: 200;
+  align-items: center; justify-content: center;
+}
+#story-modal-overlay.open { display: flex; }
+#story-modal {
+  background: var(--bg-sidebar); border: 1px solid var(--border-hi);
+  border-radius: var(--radius-lg); padding: 24px; width: 440px; max-width: 96vw;
+  display: flex; flex-direction: column; gap: 14px; max-height: 90vh; overflow-y: auto;
+}
+#story-modal h2 { font-size: 16px; font-weight: 700; }
+.story-field { display: flex; flex-direction: column; gap: 4px; }
+.story-field label { font-size: 11px; color: var(--text-mid); font-weight: 500; }
+.story-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+#story-modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Sidebar ────────────────────────────────────────────────────────── -->
+  <nav id="sidebar">
+    <div id="sidebar-header">
+      <div class="sidebar-brand">📖 Story Engine</div>
+      <div class="sidebar-sub">AuraNexus · Storyteller Mode</div>
+      <button id="btn-back-companion" onclick="window.open('/','_blank')">← Open Companion</button>
+    </div>
+
+    <div id="sidebar-sessions">
+      <div class="session-list-label">Stories</div>
+      <button id="btn-new-story" onclick="openStoryModal()">
+        <span>+</span> New Story
+      </button>
+      <div id="session-list"></div>
+    </div>
+
+    <div id="sidebar-footer">
+      <div class="sidebar-stat">
+        <span>General Memory</span>
+        <span class="sidebar-stat-val" id="sidebar-mem-count">–</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Main ───────────────────────────────────────────────────────────── -->
+  <div id="main">
+    <header id="topbar">
+      <span id="story-title-bar">No story selected</span>
+      <button class="topbar-btn" id="btn-rollback" onclick="rollbackBeat()" title="Undo last beat" style="display:none">↩ Undo</button>
+      <button class="topbar-btn accent-btn" onclick="openMemory()">🧠 Memory</button>
+    </header>
+
+    <!-- Story canvas (continuous prose) -->
+    <div id="story-canvas">
+      <div id="story-empty">
+        <div class="empty-icon">📖</div>
+        <h2>Story Engine</h2>
+        <p>Create a new story or select an existing one from the sidebar to begin your adventure.</p>
+      </div>
+    </div>
+
+    <!-- Action input bar -->
+    <div id="input-area">
+      <div id="input-row">
+        <span id="action-prefix">&gt;</span>
+        <textarea id="action-input" rows="1" placeholder="What do you do?"></textarea>
+        <button class="input-btn" id="btn-send" onclick="sendAction()">Send</button>
+        <button id="btn-stop-story" onclick="stopGeneration()">■ Stop</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Memory panel ───────────────────────────────────────────────────────── -->
+<div id="memory-overlay" onclick="closeMemory()"></div>
+<div id="memory-panel">
+  <div id="memory-header">
+    <span>🧠 General Memory</span>
+    <button id="btn-close-memory" onclick="closeMemory()">✕</button>
+  </div>
+  <div id="memory-body">
+    <div>
+      <div class="panel-section-title">Overview <span style="font-weight:400;text-transform:none;font-size:10px;color:var(--text-lo)">(general bucket only)</span></div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-card-val" id="mem-general-local">–</div><div class="stat-card-label">Local Nodes</div></div>
+        <div class="stat-card"><div class="stat-card-val" id="mem-general-clusters">–</div><div class="stat-card-label">Clusters</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel-section-title">Search Memory</div>
+      <div class="panel-form">
+        <input type="text" class="panel-input" id="mem-search-query" placeholder="Search query…" />
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="number" class="panel-input" id="mem-search-topk" value="5" min="1" max="20" style="width:70px" title="Top K" />
+          <button class="panel-btn" style="flex:1" onclick="searchMemory()">Search</button>
+        </div>
+        <div id="search-results"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel-section-title">Add to General Memory</div>
+      <div class="panel-form">
+        <textarea class="panel-input panel-textarea" id="mem-add-text" placeholder="Text to remember…"></textarea>
+        <input type="text" class="panel-input" id="mem-add-tag" placeholder="Optional tag" />
+        <button class="panel-btn" onclick="addMemory()">Add Entry</button>
+        <div id="mem-add-status" style="font-size:12px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Story setup modal ──────────────────────────────────────────────────── -->
+<div id="story-modal-overlay">
+  <div id="story-modal">
+    <h2>📖 New Story</h2>
+    <div class="story-field">
+      <label>Title *</label>
+      <input type="text" class="panel-input" id="story-title-input" placeholder="The Ashes of Morrath" />
+    </div>
+    <div class="story-row">
+      <div class="story-field">
+        <label>Genre *</label>
+        <input type="text" class="panel-input" id="story-genre" placeholder="Fantasy" />
+      </div>
+      <div class="story-field">
+        <label>Tone *</label>
+        <input type="text" class="panel-input" id="story-tone" placeholder="Dark, Brooding" />
+      </div>
+    </div>
+    <div class="story-field">
+      <label>Setting *</label>
+      <textarea class="panel-input panel-textarea" id="story-setting" placeholder="A ruined kingdom under constant rain…" style="min-height:60px"></textarea>
+    </div>
+    <div class="story-row">
+      <div class="story-field">
+        <label>Player Name *</label>
+        <input type="text" class="panel-input" id="story-player-name" placeholder="Mira" />
+      </div>
+      <div class="story-field">
+        <label>Character Description</label>
+        <input type="text" class="panel-input" id="story-player-desc" placeholder="A wandering knight" />
+      </div>
+    </div>
+    <div id="story-modal-error" class="text-danger" style="font-size:12px;display:none"></div>
+    <div id="story-modal-footer">
+      <button class="panel-btn secondary" onclick="closeStoryModal()">Cancel</button>
+      <button class="panel-btn" onclick="submitStorySetup()">Start Story</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ── State ──────────────────────────────────────────────────────────────────────
+const S = {
+  sessions: [],
+  activeSession: null,
+  streaming: false,
+  modelLoaded: false,
+  ws: null,
+};
+
+// ── API helpers ────────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  if (!r.ok && r.status !== 204) {
+    let detail = r.statusText;
+    try { detail = (await r.json()).detail || detail; } catch {}
+    throw new Error(detail);
+  }
+  if (r.status === 204) return null;
+  return r.json();
+}
+
+// ── Bootstrap ──────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    const status = await api('GET', '/api/status');
+    S.modelLoaded = status.model_loaded;
+    const g = status.memory?.general;
+    document.getElementById('sidebar-mem-count').textContent =
+      g ? `${g.local_count} nodes` : '–';
+  } catch (e) {
+    console.warn('Status fetch failed:', e);
+  }
+  await loadSessions();
+}
+
+// ── Sessions ───────────────────────────────────────────────────────────────────
+async function loadSessions() {
+  try {
+    S.sessions = await api('GET', '/api/sessions/story');
+    renderSessionList();
+  } catch (e) {
+    console.warn('Session list fetch failed:', e);
+  }
+}
+
+function renderSessionList() {
+  const el = document.getElementById('session-list');
+  el.innerHTML = '';
+  if (!S.sessions.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--text-lo);padding:8px 6px">No stories yet</div>';
+    return;
+  }
+  for (const s of S.sessions) {
+    const label = s.title || s.name || s.session_id;
+    const isActive = S.activeSession && S.activeSession.session_id === s.session_id;
+    const div = document.createElement('div');
+    div.className = 'session-item' + (isActive ? ' active' : '');
+    div.innerHTML = `
+      <span class="session-icon">📖</span>
+      <span class="session-name" title="${esc(label)}">${esc(label)}</span>
+      <button class="session-delete" title="Delete" onclick="deleteSession(event,'${esc(s.session_id)}')">✕</button>
+    `;
+    div.addEventListener('click', (e) => {
+      if (e.target.classList.contains('session-delete')) return;
+      resumeSession(s.session_id);
+    });
+    el.appendChild(div);
+  }
+}
+
+async function resumeSession(sessionId) {
+  try {
+    const session = await api('PUT', `/api/sessions/story/${sessionId}`);
+    S.activeSession = session;
+    renderCanvas(session);
+    updateTitleBar(session.title);
+    renderSessionList();
+    document.getElementById('btn-rollback').style.display = '';
+    document.getElementById('action-input').focus();
+  } catch (e) {
+    alert('Could not load story: ' + e.message);
+  }
+}
+
+async function deleteSession(e, sessionId) {
+  e.stopPropagation();
+  if (!confirm('Delete this story?')) return;
+  try {
+    await api('DELETE', `/api/sessions/story/${sessionId}`);
+    if (S.activeSession && S.activeSession.session_id === sessionId) {
+      S.activeSession = null;
+      clearCanvas();
+      updateTitleBar('No story selected');
+      document.getElementById('btn-rollback').style.display = 'none';
+    }
+    await loadSessions();
+    renderSessionList();
+  } catch (e2) {
+    alert('Could not delete story: ' + e2.message);
+  }
+}
+
+// ── Story canvas rendering ─────────────────────────────────────────────────────
+function clearCanvas() {
+  const canvas = document.getElementById('story-canvas');
+  canvas.innerHTML = `
+    <div id="story-empty">
+      <div class="empty-icon">📖</div>
+      <h2>Story Engine</h2>
+      <p>Create a new story or select an existing one from the sidebar to begin your adventure.</p>
+    </div>`;
+}
+
+function renderCanvas(session) {
+  const canvas = document.getElementById('story-canvas');
+  canvas.innerHTML = '';
+  const beats = session.beats || [];
+  for (const b of beats) {
+    appendPlayerLine(b.player);
+    appendNarratorParagraph(b.narrator);
+  }
+  scrollCanvas();
+}
+
+function appendPlayerLine(text) {
+  document.getElementById('story-empty')?.remove();
+  const canvas = document.getElementById('story-canvas');
+  const p = document.createElement('p');
+  p.className = 'story-player';
+  p.textContent = text;
+  canvas.appendChild(p);
+  scrollCanvas();
+  return p;
+}
+
+function appendNarratorParagraph(text) {
+  document.getElementById('story-empty')?.remove();
+  const canvas = document.getElementById('story-canvas');
+  const p = document.createElement('p');
+  p.className = 'story-narrator';
+  p.textContent = text || '';
+  canvas.appendChild(p);
+  scrollCanvas();
+  return p;
+}
+
+function appendSystemLine(text) {
+  const canvas = document.getElementById('story-canvas');
+  const p = document.createElement('p');
+  p.className = 'story-system';
+  p.textContent = text;
+  canvas.appendChild(p);
+  scrollCanvas();
+}
+
+function scrollCanvas() {
+  const canvas = document.getElementById('story-canvas');
+  canvas.scrollTop = canvas.scrollHeight;
+}
+
+// ── Story setup modal ──────────────────────────────────────────────────────────
+function openStoryModal() {
+  document.getElementById('story-modal-overlay').classList.add('open');
+  document.getElementById('story-title-input').focus();
+}
+
+function closeStoryModal() {
+  document.getElementById('story-modal-overlay').classList.remove('open');
+  document.getElementById('story-modal-error').style.display = 'none';
+}
+
+async function submitStorySetup() {
+  const title = document.getElementById('story-title-input').value.trim();
+  const genre = document.getElementById('story-genre').value.trim();
+  const tone = document.getElementById('story-tone').value.trim();
+  const setting = document.getElementById('story-setting').value.trim();
+  const playerName = document.getElementById('story-player-name').value.trim();
+  const playerDesc = document.getElementById('story-player-desc').value.trim();
+
+  const errEl = document.getElementById('story-modal-error');
+  if (!title || !genre || !tone || !setting || !playerName) {
+    errEl.textContent = 'Please fill in all required fields.';
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+
+  try {
+    const session = await api('POST', '/api/sessions/story', {
+      title, genre, tone, setting,
+      player_name: playerName,
+      player_desc: playerDesc,
+    });
+    closeStoryModal();
+    S.activeSession = session;
+    clearCanvas();
+    updateTitleBar(session.title);
+    await loadSessions();
+    renderSessionList();
+    appendSystemLine(`Story "${session.title}" started. Enter your first action below.`);
+    document.getElementById('btn-rollback').style.display = '';
+    document.getElementById('action-input').focus();
+  } catch (e) {
+    errEl.textContent = 'Error: ' + e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+// ── Send action (WebSocket) ────────────────────────────────────────────────────
+function sendAction() {
+  const input = document.getElementById('action-input');
+  const text = input.value.trim();
+  if (!text || S.streaming) return;
+  if (!S.activeSession) {
+    openStoryModal();
+    return;
+  }
+
+  input.value = '';
+  autoResize(input);
+
+  if (!S.modelLoaded) {
+    appendPlayerLine(text);
+    appendSystemLine('⚠ No model loaded. Start the server with --model-path /path/to/model.gguf');
+    return;
+  }
+
+  appendPlayerLine(text);
+  document.getElementById('story-empty')?.remove();
+
+  S.streaming = true;
+  document.getElementById('btn-send').disabled = true;
+  document.getElementById('btn-stop-story').classList.add('visible');
+
+  const payload = { message: text };
+
+  const narratorEl = appendNarratorParagraph('');
+  narratorEl.classList.add('streaming-cursor');
+
+  function onMsg(e) {
+    const msg = JSON.parse(e.data);
+
+    if (msg.type === 'start') return;
+
+    if (msg.type === 'token') {
+      narratorEl.textContent += msg.text;
+      scrollCanvas();
+      return;
+    }
+
+    if (msg.type === 'done') {
+      narratorEl.classList.remove('streaming-cursor');
+      narratorEl.textContent = msg.response || narratorEl.textContent;
+      scrollCanvas();
+      doneStreaming();
+      return;
+    }
+
+    if (msg.type === 'error') {
+      narratorEl.classList.remove('streaming-cursor');
+      narratorEl.textContent = '⚠ ' + msg.message;
+      narratorEl.style.color = 'var(--danger)';
+      doneStreaming();
+      return;
+    }
+
+    if (msg.type === 'aborted') {
+      narratorEl.classList.remove('streaming-cursor');
+      if (!narratorEl.textContent) narratorEl.textContent = '[Generation stopped]';
+      narratorEl.style.color = 'var(--text-lo)';
+      doneStreaming();
+    }
+  }
+
+  function onErr() {
+    narratorEl.classList.remove('streaming-cursor');
+    narratorEl.textContent = '⚠ Connection error. Is the server running?';
+    narratorEl.style.color = 'var(--danger)';
+    doneStreaming();
+  }
+
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws/story`);
+  ws.onopen = () => ws.send(JSON.stringify(payload));
+  ws.onmessage = onMsg;
+  ws.onerror = onErr;
+  ws.onclose = () => { if (S.streaming) onErr(); };
+  S.ws = ws;
+}
+
+function doneStreaming() {
+  S.streaming = false;
+  document.getElementById('btn-send').disabled = false;
+  document.getElementById('btn-stop-story').classList.remove('visible');
+  document.getElementById('action-input').focus();
+  // Refresh sidebar memory stats quietly
+  api('GET', '/api/status').then(s => {
+    const g = s.memory?.general;
+    document.getElementById('sidebar-mem-count').textContent = g ? `${g.local_count} nodes` : '–';
+  }).catch(() => {});
+}
+
+// ── Stop generation ────────────────────────────────────────────────────────────
+async function stopGeneration() {
+  try {
+    await fetch('/api/abort', { method: 'POST' });
+  } catch (e) {
+    console.warn('Abort request failed:', e);
+  }
+}
+
+// ── Rollback ───────────────────────────────────────────────────────────────────
+async function rollbackBeat() {
+  if (!S.activeSession || S.streaming) return;
+  if (!confirm('Undo the last story beat?')) return;
+  try {
+    const res = await api('POST', `/api/sessions/story/${S.activeSession.session_id}/rollback`);
+    appendSystemLine(`↩ Rolled back: "${res.removed_player_action}" (${res.beats_remaining} beats remain)`);
+    // Remove the last player + narrator paragraph pair from the canvas
+    const canvas = document.getElementById('story-canvas');
+    const narrators = canvas.querySelectorAll('.story-narrator');
+    const players = canvas.querySelectorAll('.story-player');
+    if (narrators.length) narrators[narrators.length - 1].remove();
+    if (players.length) players[players.length - 1].remove();
+  } catch (e) {
+    alert('Rollback failed: ' + e.message);
+  }
+}
+
+// ── Memory panel ───────────────────────────────────────────────────────────────
+async function openMemory() {
+  document.getElementById('memory-overlay').classList.add('open');
+  document.getElementById('memory-panel').classList.add('open');
+  await refreshMemoryState();
+}
+
+function closeMemory() {
+  document.getElementById('memory-overlay').classList.remove('open');
+  document.getElementById('memory-panel').classList.remove('open');
+}
+
+async function refreshMemoryState() {
+  try {
+    const state = await api('GET', '/api/memory');
+    const g = state.general || {};
+    document.getElementById('mem-general-local').textContent = g.local_count ?? '–';
+    document.getElementById('mem-general-clusters').textContent = g.global_count ?? '–';
+    document.getElementById('sidebar-mem-count').textContent =
+      g.local_count != null ? `${g.local_count} nodes` : '–';
+  } catch (e) {
+    console.warn('Memory state fetch failed:', e);
+  }
+}
+
+async function searchMemory() {
+  const query = document.getElementById('mem-search-query').value.trim();
+  const topK = parseInt(document.getElementById('mem-search-topk').value) || 5;
+  const resultsEl = document.getElementById('search-results');
+  if (!query) return;
+
+  resultsEl.innerHTML = '<div style="font-size:12px;color:var(--text-lo)">Searching…</div>';
+  try {
+    const results = await api('POST', '/api/memory/search', {
+      query, top_k: topK, top_clusters: 2, bucket: 'general'
+    });
+    resultsEl.innerHTML = '';
+    if (!results.length) {
+      resultsEl.innerHTML = '<div style="font-size:12px;color:var(--text-lo)">No results.</div>';
+      return;
+    }
+    for (const r of results) {
+      const card = document.createElement('div');
+      card.className = 'search-result-card';
+      card.innerHTML = `
+        <div class="search-result-score">Score: ${r.score} · Cluster: ${r.cluster_id || '–'}</div>
+        <div class="search-result-text">${esc(r.text)}</div>`;
+      resultsEl.appendChild(card);
+    }
+  } catch (e) {
+    resultsEl.innerHTML = `<div class="text-danger" style="font-size:12px">Error: ${esc(e.message)}</div>`;
+  }
+}
+
+async function addMemory() {
+  const text = document.getElementById('mem-add-text').value.trim();
+  const tag = document.getElementById('mem-add-tag').value.trim();
+  const statusEl = document.getElementById('mem-add-status');
+  if (!text) return;
+
+  statusEl.textContent = 'Adding…'; statusEl.className = '';
+  try {
+    const result = await api('POST', '/api/memory/add', {
+      text, bucket: 'general', metadata: tag ? { tag } : {},
+    });
+    document.getElementById('mem-add-text').value = '';
+    document.getElementById('mem-add-tag').value = '';
+    statusEl.textContent = `✓ Added. Total: ${result.local_count} nodes, ${result.global_count} clusters.`;
+    statusEl.className = 'text-success';
+    await refreshMemoryState();
+  } catch (e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.className = 'text-danger';
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function updateTitleBar(title) {
+  document.getElementById('story-title-bar').textContent = title || 'No story selected';
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+}
+
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ── Event listeners ────────────────────────────────────────────────────────────
+document.getElementById('action-input').addEventListener('input', function() {
+  autoResize(this);
+});
+
+document.getElementById('action-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendAction();
+  }
+});
+
+document.getElementById('story-modal-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeStoryModal();
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') { closeMemory(); closeStoryModal(); }
+});
+
+// ── Boot ───────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>

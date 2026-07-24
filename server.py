@@ -14,11 +14,8 @@ Or directly:
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
-import math
 import os
-import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
@@ -33,8 +30,8 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 from core.app import AuraNexusApp
+from storage.embedder import embed_text
 from storage.lorebook import StoryCard
-from storage.vector_store import LocalVectorStore
 
 # ── Runtime configuration (overridden by start_server() before lifespan runs) ─
 _MODEL_PATH: Optional[str] = os.environ.get("AURANEXUS_MODEL_PATH")
@@ -47,7 +44,6 @@ _MAX_TOKENS: Optional[int] = None
 
 # ── Global state ───────────────────────────────────────────────────────────────
 _app: Optional[AuraNexusApp] = None
-_vector_store: Optional[LocalVectorStore] = None
 _model_loaded: bool = False
 _inference_lock: Optional[asyncio.Lock] = None
 _executor = ThreadPoolExecutor(max_workers=2)
@@ -60,50 +56,6 @@ def _require_app() -> AuraNexusApp:
     if _app is None:
         raise HTTPException(status_code=503, detail="AuraNexus app not initialized.")
     return _app
-
-
-def _require_store() -> LocalVectorStore:
-    if _vector_store is None:
-        raise HTTPException(status_code=503, detail="Vector store not initialized.")
-    return _vector_store
-
-
-# ── Deterministic text embedding (128-dim bag-of-char-ngrams) ─────────────────
-
-def _embed_text(text: str, dim: int = 128) -> List[float]:
-    """
-    Converts text to a normalized 128-dimensional vector using character
-    n-gram frequency hashing.  No external model required; produces
-    consistent vectors for similar text, allowing HiRAG clustering.
-    """
-    text = re.sub(r"\s+", " ", text.lower().strip())
-    if not text:
-        return [0.0] * dim
-
-    freq: List[float] = [0.0] * dim
-    tokens = re.split(r"\W+", text)
-
-    for token in tokens:
-        if not token:
-            continue
-        # Unigram contributes 1.0
-        bucket = int(hashlib.md5(token.encode("utf-8")).hexdigest(), 16) % dim
-        freq[bucket] += 1.0
-        # Character bigrams contribute 0.5
-        for i in range(len(token) - 1):
-            bigram = token[i : i + 2]
-            bucket = int(hashlib.md5(bigram.encode("utf-8")).hexdigest(), 16) % dim
-            freq[bucket] += 0.5
-        # Character trigrams contribute 0.25
-        for i in range(len(token) - 2):
-            trigram = token[i : i + 3]
-            bucket = int(hashlib.md5(trigram.encode("utf-8")).hexdigest(), 16) % dim
-            freq[bucket] += 0.25
-
-    norm = math.sqrt(sum(v * v for v in freq))
-    if norm == 0.0:
-        return [0.0] * dim
-    return [v / norm for v in freq]
 
 
 # ── Stop-sequence streaming ───────────────────────────────────────────────────
@@ -232,7 +184,7 @@ async def _stream_tokens(ws: WebSocket, token_gen: Iterator[str]) -> str:
 
 @asynccontextmanager
 async def _lifespan(fastapi_app: FastAPI):  # noqa: ARG001
-    global _app, _vector_store, _model_loaded, _inference_lock
+    global _app, _model_loaded, _inference_lock
 
     _inference_lock = asyncio.Lock()
 
@@ -243,13 +195,6 @@ async def _lifespan(fastapi_app: FastAPI):  # noqa: ARG001
         user_name=_USER_NAME,
         allowed_commands={"python3"},
         require_isolation=False,
-    )
-
-    _vector_store = LocalVectorStore(
-        storage_path="memory/hirag_index.json",
-        sandbox=_app.sandbox,
-        max_cluster_size=16,
-        max_cluster_depth=6,
     )
 
     if _MODEL_PATH and Path(_MODEL_PATH).exists():
@@ -277,11 +222,9 @@ async def _lifespan(fastapi_app: FastAPI):  # noqa: ARG001
     print(f"[AuraNexus] Server ready. Open http://127.0.0.1:7860 in your browser.")
     yield
 
-    # Graceful shutdown
+    # Graceful shutdown — save_state() persists both HiRAG stores internally.
     if _app:
         _app.save_state()
-    if _vector_store:
-        _vector_store.save_index()
     _executor.shutdown(wait=False)
 
 
@@ -304,14 +247,26 @@ async def root():
     return FileResponse(str(index))
 
 
+@web.get("/story", response_class=FileResponse)
+async def story_root():
+    """Serves the dedicated Story Engine window."""
+    story_page = _STATIC_DIR / "story.html"
+    if not story_page.exists():
+        return HTMLResponse(
+            "<h1>AuraNexus Story Engine</h1>"
+            "<p>Story frontend not found — expected <code>static/story.html</code> next to server.py.</p>"
+        )
+    return FileResponse(str(story_page))
+
+
 # ── Status ─────────────────────────────────────────────────────────────────────
 
 @web.get("/api/status")
 async def api_status():
     app = _require_app()
     manifest = app.get_bootstrap_manifest()
-    store = _require_store()
-    mem = store.get_hirag_state()
+    g = app.hirag_general.get_hirag_state()
+    p = app.hirag_personal.get_hirag_state()
     return {
         "status": "ok",
         "model_loaded": _model_loaded,
@@ -320,8 +275,8 @@ async def api_status():
         "user_name": _USER_NAME,
         "app_version": manifest.get("app_version"),
         "memory": {
-            "local_count": mem["local_count"],
-            "global_count": mem["global_count"],
+            "general": {"local_count": g["local_count"], "global_count": g["global_count"]},
+            "personal": {"local_count": p["local_count"], "global_count": p["global_count"]},
         },
     }
 
@@ -555,31 +510,45 @@ async def delete_lore_card(card_id: str):
 
 # ── HiRAG memory ───────────────────────────────────────────────────────────────
 
+_VALID_BUCKETS = {"general", "personal"}
+
+
 class AddMemoryRequest(BaseModel):
     text: str = Field(min_length=1, max_length=8000)
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    bucket: str = Field(default="general")
 
 
 class SearchMemoryRequest(BaseModel):
     query: str = Field(min_length=1, max_length=1000)
     top_k: int = Field(default=5, ge=1, le=20)
     top_clusters: int = Field(default=2, ge=1, le=10)
+    bucket: str = Field(default="general")
 
 
 @web.get("/api/memory")
 async def get_memory_state():
-    return _require_store().get_hirag_state()
+    """Returns HiRAG state for both buckets."""
+    app = _require_app()
+    return {
+        "general": app.hirag_general.get_hirag_state(),
+        "personal": app.hirag_personal.get_hirag_state(),
+    }
 
 
 @web.post("/api/memory/add", status_code=201)
 async def add_memory(req: AddMemoryRequest):
-    store = _require_store()
-    vector = _embed_text(req.text)
+    app = _require_app()
+    if req.bucket not in _VALID_BUCKETS:
+        raise HTTPException(status_code=422, detail=f"bucket must be 'general' or 'personal'.")
+    store = app.hirag_personal if req.bucket == "personal" else app.hirag_general
+    vector = embed_text(req.text)
     store.add_vector(vector=vector, text=req.text, metadata=req.metadata)
     store.save_index()
     state = store.get_hirag_state()
     return {
         "status": "added",
+        "bucket": req.bucket,
         "local_count": state["local_count"],
         "global_count": state["global_count"],
     }
@@ -587,8 +556,11 @@ async def add_memory(req: AddMemoryRequest):
 
 @web.post("/api/memory/search")
 async def search_memory(req: SearchMemoryRequest):
-    store = _require_store()
-    query_vector = _embed_text(req.query)
+    app = _require_app()
+    if req.bucket not in _VALID_BUCKETS:
+        raise HTTPException(status_code=422, detail=f"bucket must be 'general' or 'personal'.")
+    store = app.hirag_personal if req.bucket == "personal" else app.hirag_general
+    query_vector = embed_text(req.query)
     results = store.query_hierarchical(
         query_vector=query_vector,
         top_k=req.top_k,
@@ -598,6 +570,7 @@ async def search_memory(req: SearchMemoryRequest):
         {
             "text": text,
             "score": round(score, 4),
+            "bucket": req.bucket,
             "cluster_id": meta.get("hirag_cluster_id"),
             "local_id": meta.get("hirag_local_id"),
             "metadata": {
