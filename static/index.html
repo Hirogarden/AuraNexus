@@ -79,20 +79,15 @@ html, body {
 #mode-section { padding: 12px 12px 0; }
 #mode-label { font-size: 10px; font-weight: 600; letter-spacing: .08em;
   text-transform: uppercase; color: var(--text-lo); margin-bottom: 6px; padding: 0 4px; }
-#mode-toggle {
-  display: flex; background: var(--bg-elevated); border-radius: var(--radius);
-  padding: 3px; gap: 2px; border: 1px solid var(--border);
+
+#btn-open-story {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 8px 10px; border-radius: var(--radius);
+  background: var(--bg-elevated); border: 1px solid var(--border-hi);
+  color: var(--text-mid); font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: all .15s; text-align: left;
 }
-.mode-btn {
-  flex: 1; padding: 6px 0; border: none; border-radius: 7px;
-  font-size: 12px; font-weight: 500; cursor: pointer;
-  color: var(--text-mid); background: transparent; transition: all .15s;
-}
-.mode-btn.active {
-  background: var(--bg-active); color: var(--accent);
-  box-shadow: 0 0 10px var(--accent-glow);
-}
-.mode-btn:hover:not(.active) { background: var(--bg-hover); color: var(--text-hi); }
+#btn-open-story:hover { background: var(--bg-hover); color: var(--accent); border-color: var(--accent-dim); }
 
 /* Session list */
 #sessions-section { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 10px 12px 0; }
@@ -383,24 +378,6 @@ html, body {
 .search-result-text { color: var(--text-hi); margin-top: 4px; white-space: pre-wrap; }
 .search-result-cluster { color: var(--text-lo); font-size: 10px; margin-top: 4px; font-family: var(--mono); }
 
-/* ── Story setup modal ─────────────────────────────────────────────────── */
-#story-modal-overlay {
-  display: none; position: fixed; inset: 0;
-  background: rgba(0,0,0,.65); z-index: 200;
-  align-items: center; justify-content: center;
-}
-#story-modal-overlay.open { display: flex; }
-#story-modal {
-  background: var(--bg-sidebar); border: 1px solid var(--border-hi);
-  border-radius: var(--radius-lg); padding: 24px; width: 440px; max-width: 96vw;
-  display: flex; flex-direction: column; gap: 14px; max-height: 90vh; overflow-y: auto;
-}
-#story-modal h2 { font-size: 16px; font-weight: 700; }
-.story-field { display: flex; flex-direction: column; gap: 4px; }
-.story-field label { font-size: 11px; color: var(--text-mid); font-weight: 500; }
-.story-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-#story-modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
-
 /* ── Lore panel ────────────────────────────────────────────────────────── */
 #lore-overlay {
   display: none; position: fixed; inset: 0;
@@ -509,11 +486,8 @@ html, body {
     </div>
 
     <div id="mode-section">
-      <div id="mode-label">Mode</div>
-      <div id="mode-toggle">
-        <button class="mode-btn active" id="btn-mode-companion" onclick="setMode('companion')">💬 Companion</button>
-        <button class="mode-btn" id="btn-mode-story" onclick="setMode('story')">📖 Story</button>
-      </div>
+      <div id="mode-label">Companion</div>
+      <button id="btn-open-story" onclick="openStoryWindow()">📖 Open Story Engine (New Tab) ↗</button>
     </div>
 
     <div id="sessions-section">
@@ -533,12 +507,12 @@ html, body {
         </div>
       </div>
       <div class="stat-row">
-        <span class="stat-label">Memory nodes</span>
-        <span class="stat-val" id="sidebar-mem-count">–</span>
+        <span class="stat-label">General memory</span>
+        <span class="stat-val" id="sidebar-general-count">–</span>
       </div>
       <div class="stat-row">
-        <span class="stat-label">HiRAG clusters</span>
-        <span class="stat-val" id="sidebar-cluster-count">–</span>
+        <span class="stat-label">Personal memory</span>
+        <span class="stat-val" id="sidebar-personal-count">–</span>
       </div>
     </div>
   </aside>
@@ -547,7 +521,6 @@ html, body {
   <main id="main">
     <header id="topbar">
       <span id="session-title">No session selected</span>
-      <button class="topbar-btn" id="btn-rollback" onclick="rollbackBeat()" title="Undo last beat (story mode only)" style="display:none">↩ Undo</button>
       <button class="topbar-btn" onclick="openWorldState()">🌍 Facts</button>
       <button class="topbar-btn" onclick="openLore()">📚 Lore</button>
       <button class="topbar-btn accent-btn" onclick="openMemory()">🧠 Memory</button>
@@ -558,7 +531,7 @@ html, body {
         <div class="empty-icon">✨</div>
         <h2>Welcome to AuraNexus</h2>
         <p>Select or create a session to get started.<br/>
-        Switch between Companion and Story modes in the sidebar.</p>
+        Use the "Open Story Engine" button to launch the Storyteller in a new tab.</p>
       </div>
     </div>
 
@@ -610,27 +583,34 @@ html, body {
     <button id="btn-close-memory" onclick="closeMemory()">✕</button>
   </div>
   <div id="memory-body">
+    <!-- General bucket -->
     <div>
-      <div class="panel-section-title">Overview</div>
-      <div class="stat-grid" id="mem-stat-grid">
-        <div class="stat-card"><div class="stat-card-val" id="mem-local-count">–</div><div class="stat-card-label">Local Nodes</div></div>
-        <div class="stat-card"><div class="stat-card-val" id="mem-cluster-count">–</div><div class="stat-card-label">Global Clusters</div></div>
-        <div class="stat-card"><div class="stat-card-val" id="mem-bridge-count">–</div><div class="stat-card-label">Bridge Links</div></div>
-        <div class="stat-card"><div class="stat-card-val" id="mem-dim">–</div><div class="stat-card-label">Vector Dim</div></div>
+      <div class="panel-section-title">General Bucket <span style="font-weight:400;text-transform:none;font-size:10px;color:var(--text-lo)">(both modes)</span></div>
+      <div class="stat-grid" id="mem-general-stat-grid">
+        <div class="stat-card"><div class="stat-card-val" id="mem-general-local">–</div><div class="stat-card-label">Local Nodes</div></div>
+        <div class="stat-card"><div class="stat-card-val" id="mem-general-clusters">–</div><div class="stat-card-label">Clusters</div></div>
       </div>
     </div>
 
+    <!-- Personal bucket -->
     <div>
-      <div class="panel-section-title">Global Clusters</div>
-      <div id="clusters-list"></div>
+      <div class="panel-section-title">Personal Bucket <span style="font-weight:400;text-transform:none;font-size:10px;color:var(--text-lo)">(companion only)</span></div>
+      <div class="stat-grid" id="mem-personal-stat-grid">
+        <div class="stat-card"><div class="stat-card-val" id="mem-personal-local">–</div><div class="stat-card-label">Local Nodes</div></div>
+        <div class="stat-card"><div class="stat-card-val" id="mem-personal-clusters">–</div><div class="stat-card-label">Clusters</div></div>
+      </div>
     </div>
 
     <div>
       <div class="panel-section-title">Search Memory</div>
       <div class="panel-form">
         <input type="text" class="panel-input" id="mem-search-query" placeholder="Search query…" />
-        <div style="display:flex;gap:6px">
-          <input type="number" class="panel-input" id="mem-search-topk" value="5" min="1" max="20" style="width:80px" title="Top K results" />
+        <div style="display:flex;gap:6px;align-items:center">
+          <select class="panel-input" id="mem-search-bucket" style="width:110px">
+            <option value="general">General</option>
+            <option value="personal">Personal</option>
+          </select>
+          <input type="number" class="panel-input" id="mem-search-topk" value="5" min="1" max="20" style="width:60px" title="Top K results" />
           <button class="panel-btn" style="flex:1" onclick="searchMemory()">Search</button>
         </div>
         <div id="search-results"></div>
@@ -641,7 +621,13 @@ html, body {
       <div class="panel-section-title">Add to Memory</div>
       <div class="panel-form">
         <textarea class="panel-input panel-textarea" id="mem-add-text" placeholder="Text to remember…"></textarea>
-        <input type="text" class="panel-input" id="mem-add-tag" placeholder="Optional tag (e.g. character, lore, note)" />
+        <div style="display:flex;gap:6px;align-items:center">
+          <select class="panel-input" id="mem-add-bucket" style="width:120px">
+            <option value="general">General</option>
+            <option value="personal">Personal</option>
+          </select>
+          <input type="text" class="panel-input" id="mem-add-tag" placeholder="Optional tag" style="flex:1" />
+        </div>
         <button class="panel-btn" onclick="addMemory()">Add Entry</button>
         <div id="mem-add-status" style="font-size:12px"></div>
       </div>
@@ -680,60 +666,20 @@ html, body {
 </div>
 
 <!-- ── Story setup modal ──────────────────────────────────────────────── -->
-<div id="story-modal-overlay">
-  <div id="story-modal">
-    <h2>📖 New Story</h2>
-    <div class="story-field">
-      <label>Title *</label>
-      <input type="text" class="panel-input" id="story-title" placeholder="The Ashes of Morrath" />
-    </div>
-    <div class="story-row">
-      <div class="story-field">
-        <label>Genre *</label>
-        <input type="text" class="panel-input" id="story-genre" placeholder="Fantasy" />
-      </div>
-      <div class="story-field">
-        <label>Tone *</label>
-        <input type="text" class="panel-input" id="story-tone" placeholder="Dark, Brooding" />
-      </div>
-    </div>
-    <div class="story-field">
-      <label>Setting *</label>
-      <textarea class="panel-input panel-textarea" id="story-setting" placeholder="A ruined kingdom under constant rain…" style="min-height:60px"></textarea>
-    </div>
-    <div class="story-row">
-      <div class="story-field">
-        <label>Player Name *</label>
-        <input type="text" class="panel-input" id="story-player-name" placeholder="Mira" />
-      </div>
-      <div class="story-field">
-        <label>Character Description</label>
-        <input type="text" class="panel-input" id="story-player-desc" placeholder="A wandering knight" />
-      </div>
-    </div>
-    <div id="story-modal-error" class="text-danger" style="font-size:12px;display:none"></div>
-    <div id="story-modal-footer">
-      <button class="panel-btn secondary" onclick="closeStoryModal()">Cancel</button>
-      <button class="panel-btn" onclick="submitStorySetup()">Start Story</button>
-    </div>
-  </div>
-</div>
 
 <script>
 "use strict";
 
 // ── State ──────────────────────────────────────────────────────────────────────
 const S = {
-  mode: 'companion',          // 'companion' | 'story'
-  sessions: [],               // list from API
-  activeSession: null,        // { session_id, name, turns? }
+  sessions: [],
+  activeSession: null,
   streaming: false,
   modelLoaded: false,
   auraName: 'Aura',
   userName: 'Hiro',
   ws: null,
   currentReflection: '',
-  currentReflectionEl: null,
 };
 
 // ── API helpers ────────────────────────────────────────────────────────────────
@@ -768,10 +714,12 @@ async function init() {
       lbl.textContent = 'no model';
     }
 
-    document.getElementById('sidebar-mem-count').textContent =
-      status.memory?.local_count ?? '–';
-    document.getElementById('sidebar-cluster-count').textContent =
-      status.memory?.global_count ?? '–';
+    const g = status.memory?.general;
+    const p = status.memory?.personal;
+    document.getElementById('sidebar-general-count').textContent =
+      g ? `${g.local_count} nodes` : '–';
+    document.getElementById('sidebar-personal-count').textContent =
+      p ? `${p.local_count} nodes` : '–';
   } catch (e) {
     console.warn('Status fetch failed:', e);
   }
@@ -779,24 +727,15 @@ async function init() {
   await loadSessions();
 }
 
-// ── Mode ───────────────────────────────────────────────────────────────────────
-function setMode(mode) {
-  S.mode = mode;
-  document.getElementById('btn-mode-companion').className =
-    'mode-btn' + (mode === 'companion' ? ' active' : '');
-  document.getElementById('btn-mode-story').className =
-    'mode-btn' + (mode === 'story' ? ' active' : '');
-  loadSessions();
-  _updateTopbarButtons();
+// ── Open story window ──────────────────────────────────────────────────────────
+function openStoryWindow() {
+  window.open('/story', '_blank');
 }
 
 // ── Sessions ───────────────────────────────────────────────────────────────────
 async function loadSessions() {
-  const endpoint = S.mode === 'companion'
-    ? '/api/sessions/chat'
-    : '/api/sessions/story';
   try {
-    S.sessions = await api('GET', endpoint);
+    S.sessions = await api('GET', '/api/sessions/chat');
     renderSessionList();
   } catch (e) {
     console.warn('Session list fetch failed:', e);
@@ -811,13 +750,13 @@ function renderSessionList() {
     return;
   }
   for (const s of S.sessions) {
-    const label = s.name || s.title || s.session_id;
+    const label = s.name || s.session_id;
     const isActive = S.activeSession && S.activeSession.session_id === s.session_id;
     const div = document.createElement('div');
     div.className = 'session-item' + (isActive ? ' active' : '');
     div.dataset.id = s.session_id;
     div.innerHTML = `
-      <span class="session-icon">${S.mode === 'story' ? '📖' : '💬'}</span>
+      <span class="session-icon">💬</span>
       <span class="session-name" title="${esc(label)}">${esc(label)}</span>
       <button class="session-delete" title="Delete" onclick="deleteSession(event,'${esc(s.session_id)}')">✕</button>
     `;
@@ -830,10 +769,6 @@ function renderSessionList() {
 }
 
 async function newSession() {
-  if (S.mode === 'story') {
-    openStoryModal();
-    return;
-  }
   const name = prompt('Session name:', `Chat ${new Date().toLocaleDateString()}`);
   if (!name) return;
   try {
@@ -850,31 +785,18 @@ async function newSession() {
 }
 
 async function resumeSession(sessionId) {
-  const endpoint = S.mode === 'companion'
-    ? `/api/sessions/chat/${sessionId}`
-    : `/api/sessions/story/${sessionId}`;
   try {
-    const session = await api('PUT', endpoint);
+    const session = await api('PUT', `/api/sessions/chat/${sessionId}`);
     S.activeSession = session;
     clearMessages();
-    const label = session.name || session.title;
-    updateSessionTitle(label);
-
-    // Replay turns / beats
-    if (S.mode === 'companion' && session.turns) {
+    updateSessionTitle(session.name);
+    if (session.turns) {
       for (const t of session.turns) {
         addMessage('user', t.user);
         addMessage('assistant', t.assistant);
       }
-    } else if (S.mode === 'story' && session.beats) {
-      for (const b of session.beats) {
-        addMessage('user', b.player);
-        addMessage('assistant', b.narrator);
-      }
     }
-
     renderSessionList();
-    _updateTopbarButtons();
   } catch (e) {
     alert('Could not load session: ' + e.message);
   }
@@ -883,11 +805,8 @@ async function resumeSession(sessionId) {
 async function deleteSession(e, sessionId) {
   e.stopPropagation();
   if (!confirm('Delete this session?')) return;
-  const endpoint = S.mode === 'companion'
-    ? `/api/sessions/chat/${sessionId}`
-    : `/api/sessions/story/${sessionId}`;
   try {
-    await api('DELETE', endpoint);
+    await api('DELETE', `/api/sessions/chat/${sessionId}`);
     if (S.activeSession && S.activeSession.session_id === sessionId) {
       S.activeSession = null;
       clearMessages();
@@ -900,66 +819,10 @@ async function deleteSession(e, sessionId) {
   }
 }
 
-// ── Story modal ────────────────────────────────────────────────────────────────
-function openStoryModal() {
-  document.getElementById('story-modal-overlay').classList.add('open');
-  document.getElementById('story-title').focus();
-}
-
-function closeStoryModal() {
-  document.getElementById('story-modal-overlay').classList.remove('open');
-  document.getElementById('story-modal-error').style.display = 'none';
-}
-
-async function submitStorySetup() {
-  const title = document.getElementById('story-title').value.trim();
-  const genre = document.getElementById('story-genre').value.trim();
-  const tone = document.getElementById('story-tone').value.trim();
-  const setting = document.getElementById('story-setting').value.trim();
-  const playerName = document.getElementById('story-player-name').value.trim();
-  const playerDesc = document.getElementById('story-player-desc').value.trim();
-
-  const errEl = document.getElementById('story-modal-error');
-  if (!title || !genre || !tone || !setting || !playerName) {
-    errEl.textContent = 'Please fill in all required fields.';
-    errEl.style.display = 'block';
-    return;
-  }
-  errEl.style.display = 'none';
-
-  try {
-    const session = await api('POST', '/api/sessions/story', {
-      title, genre, tone, setting, player_name: playerName, player_desc: playerDesc,
-    });
-    closeStoryModal();
-    S.activeSession = session;
-    clearMessages();
-    updateSessionTitle(session.title);
-    await loadSessions();
-    renderSessionList();
-    showSystemMessage(`Story "${session.title}" started. Enter your first action.`);
-  } catch (e) {
-    errEl.textContent = 'Error: ' + e.message;
-    errEl.style.display = 'block';
-  }
-}
-
 // ── WebSocket ──────────────────────────────────────────────────────────────────
 function wsEndpoint() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const path = S.mode === 'companion' ? '/ws/companion' : '/ws/story';
-  return `${proto}://${location.host}${path}`;
-}
-
-function getOrOpenWS(onMessage, onError) {
-  if (S.ws && S.ws.readyState === WebSocket.OPEN) return S.ws;
-
-  const ws = new WebSocket(wsEndpoint());
-  ws.onmessage = onMessage;
-  ws.onerror = onError;
-  ws.onclose = () => { S.ws = null; };
-  S.ws = ws;
-  return ws;
+  return `${proto}://${location.host}/ws/companion`;
 }
 
 // ── Send message ───────────────────────────────────────────────────────────────
@@ -969,8 +832,6 @@ function sendMessage() {
   if (!text || S.streaming) return;
 
   if (!S.activeSession) {
-    if (S.mode === 'story') { openStoryModal(); return; }
-    // Auto-create companion session
     api('POST', '/api/sessions/chat', { name: 'New Conversation' }).then(session => {
       S.activeSession = session;
       updateSessionTitle(session.name);
@@ -999,26 +860,11 @@ function _doSend(text) {
 
   S.streaming = true;
   S.currentReflection = '';
-  S.currentReflectionEl = null;
   document.getElementById('btn-send').disabled = true;
   document.getElementById('btn-stop').classList.add('visible');
 
-  // Build WS payload
   const payload = { message: text };
-  if (S.mode === 'story' && S.activeSession && !S.activeSession._started) {
-    // Inline story start if the story session was just created but first WS turn
-    payload.start_story = {
-      title: S.activeSession.title,
-      genre: S.activeSession.genre,
-      tone: S.activeSession.tone,
-      setting: S.activeSession.setting,
-      player_name: S.activeSession.player_name,
-      player_desc: S.activeSession.player_desc || '',
-    };
-    S.activeSession._started = true;
-  }
 
-  // Create a placeholder AI bubble that will receive streamed tokens
   const aiRow = createAIRow();
   document.getElementById('messages').appendChild(aiRow);
   scrollToBottom();
@@ -1034,10 +880,8 @@ function _doSend(text) {
     if (msg.type === 'start') {
       phase = msg.phase;
       if (phase === 'response') {
-        // Switch bubble from reflection to response
         bubble.textContent = '';
         if (S.currentReflection) {
-          // Insert collapsible reflection pill above bubble
           const pill = document.createElement('div');
           pill.className = 'reflection-pill';
           pill.textContent = '🔮 Inner reflection (click to expand)';
@@ -1102,17 +946,11 @@ function _doSend(text) {
     doneStreaming();
   }
 
-  function send() {
-    ws.send(JSON.stringify(payload));
-  }
-
   const ws = new WebSocket(wsEndpoint());
-  ws.onopen = send;
+  ws.onopen = () => ws.send(JSON.stringify(payload));
   ws.onmessage = onMsg;
   ws.onerror = onErr;
-  ws.onclose = () => {
-    if (S.streaming) { onErr(); }
-  };
+  ws.onclose = () => { if (S.streaming) { onErr(); } };
   S.ws = ws;
 }
 
@@ -1123,8 +961,10 @@ function doneStreaming() {
   document.getElementById('msg-input').focus();
   // Refresh sidebar memory stats quietly
   api('GET', '/api/status').then(s => {
-    document.getElementById('sidebar-mem-count').textContent = s.memory?.local_count ?? '–';
-    document.getElementById('sidebar-cluster-count').textContent = s.memory?.global_count ?? '–';
+    const g = s.memory?.general;
+    const p = s.memory?.personal;
+    document.getElementById('sidebar-general-count').textContent = g ? `${g.local_count} nodes` : '–';
+    document.getElementById('sidebar-personal-count').textContent = p ? `${p.local_count} nodes` : '–';
   }).catch(() => {});
 }
 
@@ -1154,7 +994,6 @@ function clearMessages() {
 function addMessage(role, text) {
   const el = document.getElementById('messages');
   document.getElementById('empty-state')?.remove();
-
   const row = document.createElement('div');
   row.className = `msg-row ${role}`;
   const bubble = document.createElement('div');
@@ -1210,32 +1049,18 @@ function closeMemory() {
 async function refreshMemoryState() {
   try {
     const state = await api('GET', '/api/memory');
-    document.getElementById('mem-local-count').textContent = state.local_count;
-    document.getElementById('mem-cluster-count').textContent = state.global_count;
-    document.getElementById('mem-bridge-count').textContent = state.bridge_count;
-    document.getElementById('mem-dim').textContent = state.vector_dim ?? '–';
+    const g = state.general || {};
+    const p = state.personal || {};
 
-    // Update sidebar stats too
-    document.getElementById('sidebar-mem-count').textContent = state.local_count;
-    document.getElementById('sidebar-cluster-count').textContent = state.global_count;
+    document.getElementById('mem-general-local').textContent = g.local_count ?? '–';
+    document.getElementById('mem-general-clusters').textContent = g.global_count ?? '–';
+    document.getElementById('mem-personal-local').textContent = p.local_count ?? '–';
+    document.getElementById('mem-personal-clusters').textContent = p.global_count ?? '–';
 
-    const list = document.getElementById('clusters-list');
-    list.innerHTML = '';
-    if (!state.clusters || !state.clusters.length) {
-      list.innerHTML = '<div style="font-size:12px;color:var(--text-lo)">No clusters yet. Add memory entries to build the HiRAG index.</div>';
-      return;
-    }
-    for (const c of state.clusters) {
-      const card = document.createElement('div');
-      card.className = 'cluster-card';
-      const nodeCount = (state.bridge_map[c.id] || []).length;
-      card.innerHTML = `
-        <div class="cluster-header">
-          <span class="cluster-id">${esc(c.id)}</span>
-          <span class="cluster-size">${c.size} node${c.size !== 1 ? 's' : ''}</span>
-        </div>`;
-      list.appendChild(card);
-    }
+    document.getElementById('sidebar-general-count').textContent =
+      g.local_count != null ? `${g.local_count} nodes` : '–';
+    document.getElementById('sidebar-personal-count').textContent =
+      p.local_count != null ? `${p.local_count} nodes` : '–';
   } catch (e) {
     console.warn('Memory state fetch failed:', e);
   }
@@ -1244,13 +1069,14 @@ async function refreshMemoryState() {
 async function searchMemory() {
   const query = document.getElementById('mem-search-query').value.trim();
   const topK = parseInt(document.getElementById('mem-search-topk').value) || 5;
+  const bucket = document.getElementById('mem-search-bucket').value;
   if (!query) return;
 
   const resultsEl = document.getElementById('search-results');
   resultsEl.innerHTML = '<div style="font-size:12px;color:var(--text-lo)">Searching…</div>';
 
   try {
-    const results = await api('POST', '/api/memory/search', { query, top_k: topK, top_clusters: 2 });
+    const results = await api('POST', '/api/memory/search', { query, top_k: topK, top_clusters: 2, bucket });
     resultsEl.innerHTML = '';
     if (!results.length) {
       resultsEl.innerHTML = '<div style="font-size:12px;color:var(--text-lo)">No results.</div>';
@@ -1260,7 +1086,7 @@ async function searchMemory() {
       const card = document.createElement('div');
       card.className = 'search-result-card';
       card.innerHTML = `
-        <div class="search-result-score">Score: ${r.score} · Cluster: ${r.cluster_id || '–'}</div>
+        <div class="search-result-score">Score: ${r.score} · ${esc(r.bucket)} · Cluster: ${r.cluster_id || '–'}</div>
         <div class="search-result-text">${esc(r.text)}</div>`;
       resultsEl.appendChild(card);
     }
@@ -1272,6 +1098,7 @@ async function searchMemory() {
 async function addMemory() {
   const text = document.getElementById('mem-add-text').value.trim();
   const tag = document.getElementById('mem-add-tag').value.trim();
+  const bucket = document.getElementById('mem-add-bucket').value;
   const statusEl = document.getElementById('mem-add-status');
   if (!text) return;
 
@@ -1280,11 +1107,12 @@ async function addMemory() {
   try {
     const result = await api('POST', '/api/memory/add', {
       text,
+      bucket,
       metadata: tag ? { tag } : {},
     });
     document.getElementById('mem-add-text').value = '';
     document.getElementById('mem-add-tag').value = '';
-    statusEl.textContent = `✓ Added. Total: ${result.local_count} nodes, ${result.global_count} clusters.`;
+    statusEl.textContent = `✓ Added to ${result.bucket}. Total: ${result.local_count} nodes, ${result.global_count} clusters.`;
     statusEl.className = 'text-success';
     await refreshMemoryState();
   } catch (e) {
@@ -1442,31 +1270,6 @@ async function retractFact(key) {
   }
 }
 
-// ── Story rollback ─────────────────────────────────────────────────────────────
-async function rollbackBeat() {
-  if (!S.activeSession || S.mode !== 'story') return;
-  if (!confirm('Undo the last story beat?')) return;
-  try {
-    const res = await api('POST', `/api/sessions/story/${S.activeSession.session_id}/rollback`);
-    showSystemMessage(`↩ Rolled back: "${res.removed_player_action}" (${res.beats_remaining} beats remain)`);
-    // Remove the last two message rows (user + assistant)
-    const msgs = document.getElementById('messages');
-    const rows = msgs.querySelectorAll('.msg-row:not(.system)');
-    if (rows.length >= 2) {
-      rows[rows.length - 1].remove();
-      rows[rows.length - 2].remove();
-    }
-  } catch (e) {
-    alert('Rollback failed: ' + e.message);
-  }
-}
-
-// Show/hide rollback button based on mode
-function _updateTopbarButtons() {
-  document.getElementById('btn-rollback').style.display =
-    (S.mode === 'story' && S.activeSession) ? '' : 'none';
-}
-
 // ── Input auto-resize ──────────────────────────────────────────────────────────
 function autoResize(el) {
   el.style.height = 'auto';
@@ -1484,14 +1287,9 @@ document.getElementById('msg-input').addEventListener('keydown', function(e) {
   }
 });
 
-// ── Story modal keyboard ───────────────────────────────────────────────────────
-document.getElementById('story-modal-overlay').addEventListener('click', function(e) {
-  if (e.target === this) closeStoryModal();
-});
-
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
-    closeMemory(); closeLore(); closeStoryModal();
+    closeMemory(); closeLore(); closeWorldState();
   }
 });
 

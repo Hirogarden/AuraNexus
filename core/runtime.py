@@ -9,6 +9,7 @@ from storage.chat_session import ChatSession
 from storage.emotional_memory import EmotionalMemory
 from storage.lorebook import LorebookManager
 from storage.story_session import StorySession
+from storage.vector_store import LocalVectorStore
 from storage.world_state import WorldState
 
 
@@ -43,6 +44,8 @@ class AuraRuntime:
         chat_session_dir: str | Path | None = None,
         story_session_dir: str | Path | None = None,
         emotional_memory_dir: str | Path | None = None,
+        hirag_general: LocalVectorStore | None = None,
+        hirag_personal: LocalVectorStore | None = None,
     ) -> None:
         if mode not in {"companion", "storyteller"}:
             raise ValueError("Mode must be either 'companion' or 'storyteller'.")
@@ -73,6 +76,11 @@ class AuraRuntime:
         self.emotional_memory: Optional[EmotionalMemory] = None
         if emotional_memory_dir is not None:
             self.emotional_memory = EmotionalMemory(base_path=emotional_memory_dir)
+
+        # HiRAG document stores — general is accessible by both modes;
+        # personal is exclusive to companion mode.
+        self.hirag_general: Optional[LocalVectorStore] = hirag_general
+        self.hirag_personal: Optional[LocalVectorStore] = hirag_personal
 
     def _chat_session_path(self, session_id: str) -> Path:
         if self.chat_session_dir is None:
@@ -193,6 +201,35 @@ class AuraRuntime:
             return []
         return self.tool_registry.get_tool_schemas()
 
+    def _build_hirag_block(self, query_text: str, *, include_personal: bool) -> str:
+        """Query HiRAG stores and return a formatted context block for prompt injection.
+
+        Companion mode passes include_personal=True to access both buckets.
+        Storyteller mode passes include_personal=False to access general only.
+        """
+        from storage.embedder import embed_text
+
+        MIN_SCORE = 0.15
+        fragments: List[str] = []
+
+        if self.hirag_general is not None:
+            vec = embed_text(query_text)
+            results = self.hirag_general.query_hierarchical(vec, top_k=3, top_clusters=2)
+            for doc_text, _meta, score in results:
+                if score >= MIN_SCORE:
+                    fragments.append(doc_text.strip())
+
+        if include_personal and self.hirag_personal is not None:
+            vec = embed_text(query_text)
+            results = self.hirag_personal.query_hierarchical(vec, top_k=3, top_clusters=2)
+            for doc_text, _meta, score in results:
+                if score >= MIN_SCORE:
+                    fragments.append(doc_text.strip())
+
+        if not fragments:
+            return ""
+        return "[Retrieved Context]\n" + "\n---\n".join(fragments)
+
     def _build_companion_prompt(self, user_input: str) -> PromptContext:
         lore_cards = self.lorebook.scan_and_retrieve(
             user_input,
@@ -243,6 +280,12 @@ class AuraRuntime:
             sections.append(world_block)
         if lore_block:
             sections.append(lore_block.strip())
+
+        # HiRAG retrieved context — companion has access to both buckets.
+        hirag_block = self._build_hirag_block(user_input, include_personal=True)
+        if hirag_block:
+            sections.append(hirag_block)
+
         if tools_block:
             sections.append(tools_block)
 
@@ -276,6 +319,11 @@ class AuraRuntime:
         lore_block = self.lorebook.format_context_block(lore_cards)
         if lore_block:
             blocks.append(lore_block.strip())
+
+        # HiRAG retrieved context — storyteller only accesses the general bucket.
+        hirag_block = self._build_hirag_block(user_input, include_personal=False)
+        if hirag_block:
+            blocks.append(hirag_block)
 
         return PromptContext(
             mode="storyteller",

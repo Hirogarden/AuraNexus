@@ -116,3 +116,86 @@ def test_runtime_builds_story_prompt_and_records_beats(tmp_path: Path) -> None:
     runtime.post_turn("I approach the dragon shrine.", "The shrine exhales sulfur and heat.")
     assert runtime.active_story is not None
     assert runtime.active_story.beats[0].narrator_response == "The shrine exhales sulfur and heat."
+
+
+def _make_runtime_with_hirag(tmp_path):
+    """Helper: build an AuraRuntime with both HiRAG stores pre-populated."""
+    from storage.vector_store import LocalVectorStore
+    from storage.embedder import embed_text
+
+    class _StubSandbox:
+        def __init__(self, root):
+            self.root = root
+        def sanitize_path(self, p):
+            return self.root / p
+        def execute_isolated_tool(self, command, timeout=30, allowed_binaries=None):
+            return {"success": True, "command": list(command)}
+
+    sandbox = _StubSandbox(tmp_path)
+
+    general = LocalVectorStore(storage_path="hirag_general.json", sandbox=sandbox)
+    personal = LocalVectorStore(storage_path="hirag_personal.json", sandbox=sandbox)
+
+    general.add_vector(
+        embed_text("The capital city is called Aldenmoor."),
+        "The capital city is called Aldenmoor.",
+        metadata={"tag": "world"},
+    )
+    personal.add_vector(
+        embed_text("Hiro's favourite colour is midnight blue."),
+        "Hiro's favourite colour is midnight blue.",
+        metadata={"tag": "personal"},
+    )
+
+    runtime = AuraRuntime(
+        inference_engine=object(),
+        lorebook=LorebookManager(),
+        world_state=WorldState(tmp_path / "world.json"),
+        hirag_general=general,
+        hirag_personal=personal,
+        aura_name="Aura",
+        user_name="Hiro",
+    )
+    return runtime
+
+
+def test_companion_prompt_includes_hirag_general_context(tmp_path):
+    runtime = _make_runtime_with_hirag(tmp_path)
+    context = runtime.build_prompt("Tell me about Aldenmoor")
+    assert context.mode == "companion"
+    assert "Aldenmoor" in context.prompt
+
+
+def test_companion_prompt_includes_hirag_personal_context(tmp_path):
+    runtime = _make_runtime_with_hirag(tmp_path)
+    context = runtime.build_prompt("What is Hiro's favourite colour?")
+    assert context.mode == "companion"
+    assert "midnight blue" in context.prompt
+
+
+def test_story_prompt_includes_hirag_general_context(tmp_path):
+    runtime = _make_runtime_with_hirag(tmp_path)
+    runtime.start_story(
+        title="City of Mist",
+        genre="Fantasy",
+        tone="Mysterious",
+        setting="An ancient walled city.",
+        player_name="Mira",
+    )
+    context = runtime.build_prompt("I walk towards the capital")
+    assert context.mode == "storyteller"
+    assert "Aldenmoor" in context.prompt
+
+
+def test_story_prompt_excludes_hirag_personal_context(tmp_path):
+    runtime = _make_runtime_with_hirag(tmp_path)
+    runtime.start_story(
+        title="City of Mist",
+        genre="Fantasy",
+        tone="Mysterious",
+        setting="An ancient walled city.",
+        player_name="Mira",
+    )
+    context = runtime.build_prompt("What is Hiro's favourite colour?")
+    assert context.mode == "storyteller"
+    assert "midnight blue" not in context.prompt
