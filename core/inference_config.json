@@ -11,5 +11,16 @@
     "dry_allowed_length": 2,
     "xtc_probability": 0.1,
     "xtc_threshold": 0.1
+  },
+  "response_lengths": {
+    "short": {
+      "max_tokens": 192
+    },
+    "normal": {
+      "max_tokens": 512
+    },
+    "long": {
+      "max_tokens": 768
+    }
   }
 }

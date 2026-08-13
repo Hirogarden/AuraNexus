@@ -1,5 +1,7 @@
 import logging
 from typing import Dict, Any, Callable, List, Sequence, Iterable
+
+from core.guardrails import scrub_value
 from core.security import SafeSandbox
 from tools.openclaw_bridge import OpenClawBridge
 from tools.hf_pipelines import HFPipelineRouter
@@ -55,10 +57,10 @@ class ToolRegistry:
             # All tools execute inside the boundaries of our sandbox root folder context
             tool_func = self._tools[name]["execute"]
             result = tool_func(self.sandbox, **arguments)
-            return {"success": True, "result": result}
+            return {"success": True, "result": scrub_value(result)}
         except Exception as e:
             logger.error(f"Execution failure in tool '{name}': {e}")
-            return {"success": False, "error": str(e)}
+            return {"success": False, "error": str(scrub_value(str(e)))}
 
     def execute_command(self, command: Sequence[str], timeout: int = 30) -> Dict[str, Any]:
         """Executes an allowlisted command in the secure sandbox context."""

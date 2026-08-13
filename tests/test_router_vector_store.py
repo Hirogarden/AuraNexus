@@ -194,3 +194,19 @@ def test_router_wires_hf_pipeline_tool_as_first_class_tool(tmp_path: Path) -> No
     assert result["success"] is True
     assert result["result"][0]["label"] == "OK"
     assert pipeline_router.calls[0]["task"] == "text-classification"
+
+
+def test_router_scrubs_sensitive_tool_output(tmp_path: Path) -> None:
+    sandbox = _StubSandbox(tmp_path)
+    router = ToolRegistry(sandbox=sandbox)
+    router.register_tool(
+        name="secret_echo",
+        description="returns a secret",
+        parameters={"type": "object", "properties": {}},
+        func=lambda _sandbox, **_kwargs: {"token": "ghp_abcdefghijklmnopqrstuvwxyz"},
+    )
+
+    result = router.execute_tool("secret_echo", {})
+    assert result["success"] is True
+    assert "ghp_" not in result["result"]["token"]
+    assert result["result"]["token"] == "[REDACTED]"

@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
+from core.guardrails import is_sensitive_key_value, redact_sensitive_text
 from core.security import SafeSandbox
 
 
@@ -14,6 +15,7 @@ class Fact:
     source: str = "user"
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     permanent: bool = False
+    sensitive: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -22,6 +24,7 @@ class Fact:
             "source": self.source,
             "created_at": self.created_at,
             "permanent": self.permanent,
+            "sensitive": self.sensitive,
         }
 
     @classmethod
@@ -32,6 +35,7 @@ class Fact:
             source=str(payload.get("source", "user")),
             created_at=str(payload.get("created_at", datetime.now().isoformat())),
             permanent=bool(payload.get("permanent", False)),
+            sensitive=bool(payload.get("sensitive", False)),
         )
 
 
@@ -85,6 +89,7 @@ class WorldState:
             value=normalized_value,
             source=str(source).strip() or "user",
             permanent=permanent,
+            sensitive=is_sensitive_key_value(normalized_key, normalized_value),
         )
         self._save()
 
@@ -116,5 +121,9 @@ class WorldState:
 
         lines = ["[Absolute facts - do not contradict these]"]
         for fact in system_facts + user_facts + other_facts:
-            lines.append(f"- {fact.key}: {fact.value}")
+            if fact.sensitive:
+                continue
+            lines.append(f"- {fact.key}: {redact_sensitive_text(fact.value)}")
+        if len(lines) == 1:
+            return ""
         return "\n".join(lines)

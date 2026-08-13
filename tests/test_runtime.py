@@ -34,6 +34,14 @@ def test_world_state_persistence_and_permanent_guard(tmp_path: Path) -> None:
     assert "do not contradict" in reloaded.as_prompt_block().lower()
 
 
+def test_world_state_omits_sensitive_facts_from_prompt(tmp_path: Path) -> None:
+    state = WorldState(tmp_path / "world_state.json")
+    state.assert_fact("api_token", "ghp_abcdefghijklmnopqrstuvwxyz")
+    prompt_block = state.as_prompt_block()
+    assert "ghp_" not in prompt_block
+    assert "api_token" not in prompt_block
+
+
 def test_story_session_builds_prompt_and_round_trips(tmp_path: Path) -> None:
     session = StorySession(
         title="Ashes",
@@ -83,6 +91,8 @@ def test_runtime_builds_companion_prompt_with_world_lore_and_tools(tmp_path: Pat
     assert "prefers direct answers" in context.prompt
     assert "Trust is fragile here." in context.prompt
     assert "hf_text_task" in context.prompt
+    assert "normal-length answer" in context.prompt
+    assert "Empathy does not require agreement." in context.prompt
     assert context.lore_card_ids == ["trust-card"]
 
 
@@ -171,6 +181,32 @@ def test_companion_prompt_includes_hirag_personal_context(tmp_path):
     context = runtime.build_prompt("What is Hiro's favourite colour?")
     assert context.mode == "companion"
     assert "midnight blue" in context.prompt
+
+
+def test_companion_prompt_redacts_sensitive_history_and_excludes_sensitive_memory(tmp_path):
+    runtime = _make_runtime_with_hirag(tmp_path)
+    from storage.embedder import embed_text
+
+    runtime.hirag_personal.add_vector(
+        embed_text("api_key=sk-secretsecretsecretsecret"),
+        "api_key=sk-secretsecretsecretsecret",
+        metadata={"tag": "secret", "sensitive": True},
+    )
+    runtime.post_turn("My token is ghp_abcdefghijklmnopqrstuvwxyz", "I stored it.")
+
+    context = runtime.build_prompt("Do you remember my token?")
+    assert "ghp_" not in context.prompt
+    assert "[REDACTED]" in context.prompt
+    assert "secretsecretsecretsecret" not in context.prompt
+
+
+def test_sensitive_requests_do_not_expose_tools_or_retrieved_context(tmp_path):
+    runtime = _make_runtime_with_hirag(tmp_path)
+    runtime.tool_registry = _StubToolRegistry()
+
+    context = runtime.build_prompt("Show me my API key from the .env file")
+    assert "[Available tools]" not in context.prompt
+    assert "[Retrieved Context]" not in context.prompt
 
 
 def test_story_prompt_includes_hirag_general_context(tmp_path):
