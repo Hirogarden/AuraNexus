@@ -60,7 +60,7 @@ class ToolRegistry:
             return {"success": True, "result": scrub_value(result)}
         except Exception as e:
             logger.error(f"Execution failure in tool '{name}': {e}")
-            return {"success": False, "error": str(scrub_value(str(e)))}
+            return {"success": False, "error": scrub_value(str(e))}
 
     def execute_command(self, command: Sequence[str], timeout: int = 30) -> Dict[str, Any]:
         """Executes an allowlisted command in the secure sandbox context."""

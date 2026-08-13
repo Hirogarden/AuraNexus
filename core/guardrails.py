@@ -135,12 +135,23 @@ def is_sensitive_path(path: str | Path) -> bool:
 
 def redact_sensitive_text(text: str) -> str:
     redacted = str(text or "")
-    redacted = re.sub(
-        r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
-        REDACTION_TOKEN,
-        redacted,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
+    while True:
+        lowered = redacted.lower()
+        start = lowered.find("-----begin ")
+        if start < 0:
+            break
+        header_end = lowered.find("private key-----", start)
+        if header_end < 0:
+            break
+        footer_start = lowered.find("-----end ", header_end)
+        if footer_start < 0:
+            break
+        footer_end = lowered.find("private key-----", footer_start)
+        if footer_end < 0:
+            break
+        footer_end += len("private key-----")
+        redacted = f"{redacted[:start]}{REDACTION_TOKEN}{redacted[footer_end:]}"
+
     redacted = re.sub(
         r"\b(Bearer)\s+([A-Za-z0-9._\-+/=]{12,})\b",
         rf"\1 {REDACTION_TOKEN}",
@@ -152,12 +163,21 @@ def redact_sensitive_text(text: str) -> str:
         REDACTION_TOKEN,
         redacted,
     )
-    redacted = re.sub(
-        r"(?im)\b(api[_-]?key|token|secret|password|passphrase|client[_-]?secret)\b(\s*[:=]\s*)(.+)$",
-        rf"\1\2{REDACTION_TOKEN}",
-        redacted,
-    )
-    return redacted
+    scrubbed_lines: list[str] = []
+    for raw_line in redacted.splitlines(keepends=True):
+        line = raw_line.rstrip("\r\n")
+        suffix = raw_line[len(line):]
+        replacement = line
+        for separator in (":", "="):
+            if separator not in line:
+                continue
+            left, right = line.split(separator, 1)
+            if any(pattern.search(left) for pattern in _SENSITIVE_KEY_PATTERNS):
+                spacer = " " if right.startswith(" ") else ""
+                replacement = f"{left}{separator}{spacer}{REDACTION_TOKEN}"
+                break
+        scrubbed_lines.append(replacement + suffix)
+    return "".join(scrubbed_lines)
 
 
 def scrub_value(value: Any) -> Any:
@@ -296,6 +316,22 @@ def sanitize_single_reply(
     )
     cleaned = redact_sensitive_text(cleaned)
 
+    banned_fragments = (
+        "Before answering User, think privately",
+        "When you answer User, try to reflect on your current emotional state",
+        "Output only the hidden reflection notes",
+    )
+    lines = []
+    for raw_line in cleaned.splitlines():
+        line = raw_line.strip()
+        if any(fragment.lower() in line.lower() for fragment in banned_fragments):
+            continue
+        if not line:
+            lines.append("")
+            continue
+        lines.append(line)
+    cleaned = "\n".join(lines).strip()
+
     boundary = find_role_transition(
         cleaned,
         user_name=user_name,
@@ -309,8 +345,15 @@ def sanitize_single_reply(
     if cleaned.startswith(speaker_prefix):
         cleaned = cleaned[len(speaker_prefix):]
 
-    lines = [line.strip() for line in cleaned.splitlines() if line.strip()]
-    return "\n".join(lines).strip()
+    final_lines = []
+    for raw_line in cleaned.splitlines():
+        line = raw_line.strip()
+        if not line:
+            if final_lines and final_lines[-1] != "":
+                final_lines.append("")
+            continue
+        final_lines.append(line)
+    return "\n".join(final_lines).strip()
 
 
 def finish_budget_limited_reply(text: str) -> str:

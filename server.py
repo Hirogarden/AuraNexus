@@ -82,7 +82,7 @@ def _stopping_wrap(
     Handles stop sequences that straddle token boundaries by maintaining a
     rolling tail buffer for lookback.
     """
-    if not stop_sequences:
+    if not stop_sequences and role_boundary_detector is None:
         yield from gen
         return
 
@@ -545,10 +545,11 @@ async def add_memory(req: AddMemoryRequest):
     if req.bucket not in _VALID_BUCKETS:
         raise HTTPException(status_code=422, detail=f"bucket must be 'general' or 'personal'.")
     store = app.hirag_personal if req.bucket == "personal" else app.hirag_general
-    vector = embed_text(req.text)
+    redacted_text = redact_sensitive_text(req.text)
+    vector = embed_text(redacted_text)
     metadata = dict(req.metadata)
-    metadata["sensitive"] = bool(metadata.get("sensitive")) or contains_sensitive_text(req.text)
-    store.add_vector(vector=vector, text=redact_sensitive_text(req.text), metadata=metadata)
+    metadata["sensitive"] = bool(metadata.get("sensitive")) or contains_sensitive_text(redacted_text)
+    store.add_vector(vector=vector, text=redacted_text, metadata=metadata)
     store.save_index()
     state = store.get_hirag_state()
     return {
