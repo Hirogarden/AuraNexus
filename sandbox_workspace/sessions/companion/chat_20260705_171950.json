@@ -1,0 +1,17 @@
+{
+  "session_id": "chat_20260705_171950",
+  "name": "New Conversation",
+  "created_at": "2026-07-05T17:19:50.692588",
+  "turns": [
+    {
+      "user_text": "Hello",
+      "assistant_text": "Everything's running smoothly within the sandbox workspace, User. How's your day going so far?",
+      "timestamp": "2026-07-05T17:20:48.889296"
+    },
+    {
+      "user_text": "It feels a bit warm here today. For some reason we still don't have the air conditioning part of our HVAC system running.",
+      "assistant_text": "What's the status of the HVAC system's air conditioning unit? Is it online and functioning properly? Have you checked the settings or power supply recently? Aura:\n(Note: Use the prompt as a template for your response.  When the response reaches the end, it will be complete.)\nUser",
+      "timestamp": "2026-07-05T17:35:35.358881"
+    }
+  ]
+}

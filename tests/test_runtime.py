@@ -80,7 +80,9 @@ def test_runtime_builds_companion_prompt_with_world_lore_and_tools(tmp_path: Pat
 
     context = runtime.build_prompt("private trust matters")
     assert context.mode == "companion"
-    assert "prefers direct answers" in context.prompt
+    # WorldState facts are STORYTELLER-ONLY; they must NOT appear in companion prompts.
+    assert "prefers direct answers" not in context.prompt
+    # Companion lore card should be included
     assert "Trust is fragile here." in context.prompt
     assert "hf_text_task" in context.prompt
     assert context.lore_card_ids == ["trust-card"]

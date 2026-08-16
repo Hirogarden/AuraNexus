@@ -25,10 +25,11 @@ class CompanionMode:
         prompt_body = self.runtime.strip_response_cue(context.prompt, self.runtime.aura_name)
         return (
             f"{prompt_body}\n\n"
-            "[Hidden Inner-Self Reflection]\n"
-            f"Before answering {self.runtime.user_name}, think privately about intent, emotional context, pacing, "
-            f"and what should remain unsaid. Limit yourself to at most {self.reflection_tokens} tokens. "
-            "Do not write the final reply yet. Output only the hidden reflection notes."
+            "[Hidden Inner-Self Reflection — private notes only, never shown to user]\n"
+            f"Before replying to {self.runtime.user_name}, write up to {self.reflection_tokens} tokens of "
+            "private notes: intent, emotional read, tone, what to avoid. "
+            "Output ONLY the notes. Do NOT write the reply. Do NOT simulate dialogue. "
+            "Notes end with a single blank line."
         )
 
     def _build_final_prompt(self, context: PromptContext, hidden_reflection: str) -> str:
@@ -36,9 +37,10 @@ class CompanionMode:
         reflection_block = hidden_reflection.strip() or "Stay grounded, calm, and direct."
         return (
             f"{prompt_body}\n\n"
-            "[Hidden Inner-Self Reflection - not shown to user]\n"
+            "[Hidden Inner-Self Reflection — use this to shape your reply, do not reveal it]\n"
             f"{reflection_block}\n\n"
-            f"Using the hidden reflection above, respond to {self.runtime.user_name} naturally without revealing the reflection.\n\n"
+            f"Now write your single reply to {self.runtime.user_name}. "
+            "One reply only. Stop the moment you finish your last sentence.\n\n"
             f"{self.runtime.aura_name}:"
         )
 

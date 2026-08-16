@@ -33,6 +33,7 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 from core.app import AuraNexusApp
+from core.context_filter import ContextFilter, MemoryMode
 from storage.lorebook import StoryCard
 from storage.vector_store import LocalVectorStore
 
@@ -564,6 +565,7 @@ class SearchMemoryRequest(BaseModel):
     query: str = Field(min_length=1, max_length=1000)
     top_k: int = Field(default=5, ge=1, le=20)
     top_clusters: int = Field(default=2, ge=1, le=10)
+    mode: str = Field(default="companion", pattern="^(companion|storyteller|shared)$")
 
 
 @web.get("/api/memory")
@@ -594,6 +596,10 @@ async def search_memory(req: SearchMemoryRequest):
         top_k=req.top_k,
         top_clusters=req.top_clusters,
     )
+    # Apply context filter so the UI search respects mode boundaries
+    mode = req.mode if req.mode in ("companion", "storyteller") else "companion"
+    cf = ContextFilter(MemoryMode(mode))
+    results = cf.filter_search_results(results)
     return [
         {
             "text": text,

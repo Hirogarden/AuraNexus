@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Literal, Optional, Protocol
 
+from core.context_filter import ContextFilter, MemoryMode
 from core.response_tracker import ResponseTracker
 from core.symbolic_gate import SymbolicGate, ToolAccess
 from storage.chat_session import ChatSession
@@ -194,14 +195,20 @@ class AuraRuntime:
         return self.tool_registry.get_tool_schemas()
 
     def _build_companion_prompt(self, user_input: str) -> PromptContext:
-        lore_cards = self.lorebook.scan_and_retrieve(
+        ctx_filter = ContextFilter(MemoryMode.COMPANION)
+
+        lore_cards_raw = self.lorebook.scan_and_retrieve(
             user_input,
             mode="companion",
             persona_id=self.aura_name,
             state_tags={"dialogue", "companion"},
         )
+        # Filter lore cards to companion-permitted pool
+        lore_cards = ctx_filter.filter_lore_cards(lore_cards_raw)
         lore_block = self.lorebook.format_context_block(lore_cards)
-        world_block = self.world_state.as_prompt_block()
+
+        # WorldState is STORYTELLER-ONLY — never injected in companion mode
+        world_block = ""
         history_lines: List[str] = []
         if self.active_chat_session is not None:
             recent_turns = self.active_chat_session.recent_turns(self.max_recent_turns)
@@ -226,12 +233,19 @@ class AuraRuntime:
                 tools_block = f"[Available tools]\n{filtered_names}"
 
         persona = (
-            f"You are {self.aura_name}, a reflective local AI companion. "
-            f"Respond directly to {self.user_name} in one focused reply. "
-            f"Do not simulate the conversation continuing after your reply."
+            f"You are {self.aura_name}, a reflective local AI companion.\n"
+            f"Write exactly ONE reply addressed to {self.user_name}. "
+            f"Stop writing the moment your reply is complete. "
+            f"Do NOT write anything after your reply ends — no follow-up questions on a new line, "
+            f"no simulated user responses, no second reply, no scene descriptions. "
+            f"Your reply ends when you finish your last sentence."
         )
 
         sections = [persona]
+
+        # Inject denied-pool boundary note so the model never guesses at
+        # locked data it was not given.
+        sections.append(ctx_filter.denied_pools_note())
 
         # Emotional context just after the persona.
         if self.emotional_memory is not None:
@@ -264,18 +278,27 @@ class AuraRuntime:
         if self.active_story is None:
             raise RuntimeError("Storyteller mode requires an active story session.")
 
-        lore_cards = self.lorebook.scan_and_retrieve(
+        ctx_filter = ContextFilter(MemoryMode.STORYTELLER)
+
+        lore_cards_raw = self.lorebook.scan_and_retrieve(
             user_input,
             mode="storyteller",
             state_tags={"narrative", "story"},
         )
+        # Filter lore cards to storyteller-permitted pool
+        lore_cards = ctx_filter.filter_lore_cards(lore_cards_raw)
+
         blocks = []
+        # WorldState is STORYTELLER-ONLY — included here only
         world_block = self.world_state.as_prompt_block()
         if world_block:
             blocks.append(world_block)
         lore_block = self.lorebook.format_context_block(lore_cards)
         if lore_block:
             blocks.append(lore_block.strip())
+
+        # Inject boundary note for the storyteller pipeline
+        blocks.insert(0, ctx_filter.denied_pools_note())
 
         return PromptContext(
             mode="storyteller",

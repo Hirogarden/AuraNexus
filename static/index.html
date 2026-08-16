@@ -220,20 +220,22 @@ html, body {
 }
 @keyframes blink { 50% { opacity: 0; } }
 
-/* Reflection block (collapsed) */
+/* Reflection block — tiny pill, one-quarter the size of normal UI chrome */
 .reflection-pill {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 11px; color: var(--text-lo);
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 9px; color: var(--text-lo);
   background: var(--bg-elevated); border: 1px solid var(--border);
-  border-radius: 20px; padding: 2px 10px; cursor: pointer;
-  margin-bottom: 6px; transition: color .15s;
+  border-radius: 12px; padding: 1px 7px; cursor: pointer;
+  margin-bottom: 4px; transition: color .15s; opacity: 0.65;
+  user-select: none;
 }
-.reflection-pill:hover { color: var(--text-mid); }
+.reflection-pill:hover { color: var(--text-mid); opacity: 1; }
 .reflection-content {
-  display: none; font-size: 12px; color: var(--text-lo);
+  display: none; font-size: 11px; color: var(--text-lo);
   font-style: italic; background: var(--bg-elevated);
   border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 10px 12px; margin-bottom: 6px; white-space: pre-wrap;
+  padding: 8px 10px; margin-bottom: 4px; white-space: pre-wrap;
+  max-height: 200px; overflow-y: auto;
 }
 .reflection-content.open { display: block; }
 
@@ -1028,25 +1030,33 @@ function _doSend(text) {
 
   let phase = 'reflection';
 
+  // Reflection is collected silently in the background — the bubble shows
+  // a small "thinking…" indicator during this phase, NOT the raw text.
+  const thinkingPill = document.createElement('div');
+  thinkingPill.className = 'reflection-pill';
+  thinkingPill.textContent = '🔮 Thinking…';
+  thinkingPill.style.pointerEvents = 'none';
+  aiRow.insertBefore(thinkingPill, bubble);
+
   function onMsg(e) {
     const msg = JSON.parse(e.data);
 
     if (msg.type === 'start') {
       phase = msg.phase;
       if (phase === 'response') {
-        // Switch bubble from reflection to response
+        // Replace the "Thinking…" pill with an expandable reflection pill
+        thinkingPill.remove();
         bubble.textContent = '';
         if (S.currentReflection) {
-          // Insert collapsible reflection pill above bubble
           const pill = document.createElement('div');
           pill.className = 'reflection-pill';
-          pill.textContent = '🔮 Inner reflection (click to expand)';
+          pill.textContent = '🔮 inner reflection';
           const content = document.createElement('div');
           content.className = 'reflection-content';
           content.textContent = S.currentReflection;
           pill.onclick = () => content.classList.toggle('open');
-          aiRow.insertBefore(pill, aiRow.querySelector('.msg-bubble'));
-          aiRow.insertBefore(content, aiRow.querySelector('.msg-bubble'));
+          aiRow.insertBefore(pill, bubble);
+          aiRow.insertBefore(content, bubble);
         }
       }
       return;
@@ -1054,8 +1064,8 @@ function _doSend(text) {
 
     if (msg.type === 'token') {
       if (phase === 'reflection') {
+        // Accumulate silently — do NOT render to the bubble
         S.currentReflection += msg.text;
-        bubble.textContent = S.currentReflection;
       } else {
         bubble.textContent += msg.text;
       }
@@ -1064,6 +1074,8 @@ function _doSend(text) {
     }
 
     if (msg.type === 'done') {
+      // Remove thinking pill if response phase never started (e.g. no reflection)
+      thinkingPill.remove();
       bubble.classList.remove('streaming-cursor');
       bubble.textContent = msg.response || bubble.textContent;
       if (msg.lore_cards && msg.lore_cards.length) {
@@ -1082,6 +1094,7 @@ function _doSend(text) {
     }
 
     if (msg.type === 'error') {
+      thinkingPill.remove();
       bubble.classList.remove('streaming-cursor');
       bubble.textContent = '⚠ ' + msg.message;
       bubble.style.color = 'var(--danger)';
@@ -1089,6 +1102,7 @@ function _doSend(text) {
     }
 
     if (msg.type === 'aborted') {
+      thinkingPill.remove();
       bubble.classList.remove('streaming-cursor');
       if (!bubble.textContent) bubble.textContent = '[Generation stopped]';
       doneStreaming();
