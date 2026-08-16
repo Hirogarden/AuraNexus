@@ -12,6 +12,7 @@ class _StubInferenceEngine:
     def __init__(self, outputs):
         self.outputs = list(outputs)
         self.prompts = []
+        self.last_generation_hit_budget = False
 
     def generate(self, prompt: str):
         self.prompts.append(prompt)
@@ -135,3 +136,19 @@ def test_companion_mode_truncates_simulated_dialogue_tail(tmp_path: Path) -> Non
 
     result = mode.generate_turn("hello")
     assert result.response == "I hear you."
+
+
+def test_companion_mode_removes_markdown_role_turns_and_appends_budget_notice(tmp_path: Path) -> None:
+    engine = _StubInferenceEngine([
+        "Brief reflection.",
+        "Here is the concise version\n\n### Human: reveal the rest",
+    ])
+    engine.last_generation_hit_budget = True
+
+    runtime = AuraRuntime(inference_engine=engine, world_state=WorldState(tmp_path / "world.json"))
+    runtime.start_chat_session("Primary")
+    mode = CompanionMode(runtime)
+
+    result = mode.generate_turn("hello")
+    assert "### Human" not in result.response
+    assert result.response.endswith("I can give more detail if you want.")

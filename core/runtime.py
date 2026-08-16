@@ -3,6 +3,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Literal, Optional, Protocol
 
+from core.guardrails import (
+    anti_sycophancy_prompt,
+    contains_sensitive_text,
+    is_sensitive_request,
+    redact_sensitive_text,
+)
 from core.response_tracker import ResponseTracker
 from core.symbolic_gate import SymbolicGate, ToolAccess
 from storage.chat_session import ChatSession
@@ -211,28 +217,41 @@ class AuraRuntime:
 
         MIN_SCORE = 0.15
         fragments: List[str] = []
+        if is_sensitive_request(query_text):
+            return ""
 
         if self.hirag_general is not None:
             vec = embed_text(query_text)
             results = self.hirag_general.query_hierarchical(vec, top_k=3, top_clusters=2)
             for doc_text, _meta, score in results:
-                if score >= MIN_SCORE:
-                    fragments.append(doc_text.strip())
+                if score >= MIN_SCORE and not contains_sensitive_text(doc_text):
+                    fragments.append(redact_sensitive_text(doc_text.strip()))
 
         if include_personal and self.hirag_personal is not None:
             vec = embed_text(query_text)
             results = self.hirag_personal.query_hierarchical(vec, top_k=3, top_clusters=2)
-            for doc_text, _meta, score in results:
-                if score >= MIN_SCORE:
-                    fragments.append(doc_text.strip())
+            for doc_text, meta, score in results:
+                if (
+                    score >= MIN_SCORE
+                    and not bool(meta.get("sensitive"))
+                    and not contains_sensitive_text(doc_text)
+                ):
+                    fragments.append(redact_sensitive_text(doc_text.strip()))
 
         if not fragments:
             return ""
         return "[Retrieved Context]\n" + "\n---\n".join(fragments)
 
+    def _response_length_prompt(self) -> str:
+        getter = getattr(self.inference_engine, "get_response_length_prompt", None)
+        if callable(getter):
+            return getter()
+        return "Give a normal-length answer with enough detail to be useful, without padding or overexplaining."
+
     def _build_companion_prompt(self, user_input: str) -> PromptContext:
+        safe_user_input = redact_sensitive_text(user_input)
         lore_cards = self.lorebook.scan_and_retrieve(
-            user_input,
+            safe_user_input,
             mode="companion",
             persona_id=self.aura_name,
             state_tags={"dialogue", "companion"},
@@ -243,21 +262,22 @@ class AuraRuntime:
         if self.active_chat_session is not None:
             recent_turns = self.active_chat_session.recent_turns(self.max_recent_turns)
             for turn in recent_turns:
-                history_lines.append(f"{self.user_name}: {turn.user_text}")
-                history_lines.append(f"{self.aura_name}: {turn.assistant_text}")
+                history_lines.append(f"{self.user_name}: {redact_sensitive_text(turn.user_text)}")
+                history_lines.append(f"{self.aura_name}: {redact_sensitive_text(turn.assistant_text)}")
         else:
             for prior_user, prior_assistant in self.recent_turns[-self.max_recent_turns:]:
-                history_lines.append(f"{self.user_name}: {prior_user}")
-                history_lines.append(f"{self.aura_name}: {prior_assistant}")
+                history_lines.append(f"{self.user_name}: {redact_sensitive_text(prior_user)}")
+                history_lines.append(f"{self.aura_name}: {redact_sensitive_text(prior_assistant)}")
 
         tool_schemas = self.get_tool_schemas()
         tool_names = [schema.get("function", {}).get("name", "") for schema in tool_schemas]
 
         # Ask the SymbolicGate what this message needs.
-        decision = self.symbolic_gate.decide(user_input, tools_enabled=bool(tool_names))
+        decision = self.symbolic_gate.decide(safe_user_input, tools_enabled=bool(tool_names))
 
         tools_block = ""
-        if not decision.blocks_tools() and tool_names:
+        sensitive_request = is_sensitive_request(safe_user_input)
+        if not decision.blocks_tools() and not sensitive_request and tool_names:
             filtered_names = ", ".join(name for name in tool_names if name)
             if filtered_names:
                 tools_block = f"[Available tools]\n{filtered_names}"
@@ -268,21 +288,21 @@ class AuraRuntime:
             f"Do not simulate the conversation continuing after your reply."
         )
 
-        sections = [persona]
+        sections = [persona, f"[Response length]\n{self._response_length_prompt()}", anti_sycophancy_prompt()]
 
         # Emotional context just after the persona.
         if self.emotional_memory is not None:
             emo_block = self.emotional_memory.get_context_block()
             if emo_block:
-                sections.append(emo_block)
+                sections.append(redact_sensitive_text(emo_block))
 
         if world_block:
-            sections.append(world_block)
+            sections.append(redact_sensitive_text(world_block))
         if lore_block:
-            sections.append(lore_block.strip())
+            sections.append(redact_sensitive_text(lore_block.strip()))
 
         # HiRAG retrieved context — companion has access to both buckets.
-        hirag_block = self._build_hirag_block(user_input, include_personal=True)
+        hirag_block = self._build_hirag_block(safe_user_input, include_personal=True)
         if hirag_block:
             sections.append(hirag_block)
 
@@ -291,10 +311,15 @@ class AuraRuntime:
 
         # Anti-repetition cues immediately before the conversation history.
         sections.append(self.response_tracker.as_prompt_block())
+        if sensitive_request:
+            sections.append(
+                "[Security boundary]\n"
+                "Do not help inspect, retrieve, or reveal secrets, credentials, tokens, or private keys."
+            )
 
         if history_lines:
             sections.append("\n".join(history_lines))
-        sections.append(f"{self.user_name}: {user_input}")
+        sections.append(f"{self.user_name}: {safe_user_input}")
         sections.append(f"{self.aura_name}:")
 
         return PromptContext(
@@ -304,30 +329,33 @@ class AuraRuntime:
         )
 
     def _build_story_prompt(self, user_input: str) -> PromptContext:
+        safe_user_input = redact_sensitive_text(user_input)
         if self.active_story is None:
             raise RuntimeError("Storyteller mode requires an active story session.")
 
         lore_cards = self.lorebook.scan_and_retrieve(
-            user_input,
+            safe_user_input,
             mode="storyteller",
             state_tags={"narrative", "story"},
         )
         blocks = []
         world_block = self.world_state.as_prompt_block()
         if world_block:
-            blocks.append(world_block)
+            blocks.append(redact_sensitive_text(world_block))
         lore_block = self.lorebook.format_context_block(lore_cards)
         if lore_block:
-            blocks.append(lore_block.strip())
+            blocks.append(redact_sensitive_text(lore_block.strip()))
 
         # HiRAG retrieved context — storyteller only accesses the general bucket.
-        hirag_block = self._build_hirag_block(user_input, include_personal=False)
+        hirag_block = self._build_hirag_block(safe_user_input, include_personal=False)
         if hirag_block:
             blocks.append(hirag_block)
+        blocks.append(f"[Response length]\n{self._response_length_prompt()}")
+        blocks.append(anti_sycophancy_prompt())
 
         return PromptContext(
             mode="storyteller",
-            prompt=self.active_story.build_prompt(user_input, extra_system="\n\n".join(blocks)),
+            prompt=self.active_story.build_prompt(safe_user_input, extra_system="\n\n".join(blocks)),
             lore_card_ids=[card.id for card in lore_cards],
         )
 

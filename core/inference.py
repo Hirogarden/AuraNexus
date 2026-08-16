@@ -6,6 +6,8 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Generator, Any
 
+from core.guardrails import normalize_response_length, response_length_prompt
+
 try:
     from llama_cpp import Llama
     _LLAMA_IMPORT_ERROR: Exception | None = None
@@ -29,11 +31,27 @@ class SamplingConfig:
 
 
 @dataclass(frozen=True)
+class ResponseLengthPreset:
+    max_tokens: int
+
+
+@dataclass(frozen=True)
+class ResponseLengthConfig:
+    short: ResponseLengthPreset
+    normal: ResponseLengthPreset
+    long: ResponseLengthPreset
+
+    def preset(self, mode: str) -> ResponseLengthPreset:
+        return getattr(self, normalize_response_length(mode))
+
+
+@dataclass(frozen=True)
 class InferenceConfig:
     required_ram_buffer_mb: float
     n_gpu_layers: int
     ctx_size: int
     sampling: SamplingConfig
+    response_lengths: ResponseLengthConfig
 
 
 def _default_config_path() -> Path:
@@ -112,11 +130,38 @@ def load_inference_config(config_path: str | Path | None = None) -> InferenceCon
         ),
     )
 
+    response_lengths_raw = raw.get("response_lengths")
+    if response_lengths_raw is None:
+        response_lengths_raw = {
+            "short": {"max_tokens": max(64, min(256, sampling.max_tokens // 2 or sampling.max_tokens))},
+            "normal": {"max_tokens": sampling.max_tokens},
+            "long": {"max_tokens": max(sampling.max_tokens, min(sampling.max_tokens * 2, 1024))},
+        }
+
+    if not isinstance(response_lengths_raw, dict):
+        raise ValueError("Invalid config: 'response_lengths' must be an object.")
+
+    def _load_length_preset(name: str) -> ResponseLengthPreset:
+        preset_raw = response_lengths_raw.get(name)
+        if not isinstance(preset_raw, dict):
+            raise ValueError(f"Invalid config: 'response_lengths.{name}' must be an object.")
+        max_tokens = preset_raw.get("max_tokens")
+        if not isinstance(max_tokens, int) or max_tokens < 1:
+            raise ValueError(
+                f"Invalid config: 'response_lengths.{name}.max_tokens' must be an integer >= 1."
+            )
+        return ResponseLengthPreset(max_tokens=max_tokens)
+
     return InferenceConfig(
         required_ram_buffer_mb=required_ram_buffer_mb,
         n_gpu_layers=n_gpu_layers_raw,
         ctx_size=ctx_size_raw,
         sampling=sampling,
+        response_lengths=ResponseLengthConfig(
+            short=_load_length_preset("short"),
+            normal=_load_length_preset("normal"),
+            long=_load_length_preset("long"),
+        ),
     )
 
 class InferenceEngine:
@@ -133,6 +178,8 @@ class InferenceEngine:
         self.required_ram_buffer_mb = self.config.required_ram_buffer_mb
         self._max_tokens_override: int | None = None
         self._temperature_override: float | None = None
+        self._response_length_mode: str = "normal"
+        self._last_generation_hit_budget = False
         self._verify_system_resources()
 
     def set_generation_overrides(
@@ -140,6 +187,7 @@ class InferenceEngine:
         *,
         max_tokens: int | None = None,
         temperature: float | None = None,
+        response_length: str | None = None,
     ) -> None:
         if max_tokens is not None and int(max_tokens) < 1:
             raise ValueError("max_tokens override must be >= 1")
@@ -148,6 +196,26 @@ class InferenceEngine:
 
         self._max_tokens_override = None if max_tokens is None else int(max_tokens)
         self._temperature_override = None if temperature is None else float(temperature)
+        if response_length is not None:
+            self._response_length_mode = normalize_response_length(response_length)
+
+    def set_response_length_mode(self, mode: str) -> None:
+        self._response_length_mode = normalize_response_length(mode)
+
+    def get_response_length_mode(self) -> str:
+        return self._response_length_mode
+
+    def get_response_length_prompt(self) -> str:
+        return response_length_prompt(self._response_length_mode)
+
+    def get_response_length_max_tokens(self) -> int:
+        if self._max_tokens_override is not None:
+            return self._max_tokens_override
+        return self.config.response_lengths.preset(self._response_length_mode).max_tokens
+
+    @property
+    def last_generation_hit_budget(self) -> bool:
+        return self._last_generation_hit_budget
 
     def _verify_system_resources(self) -> None:
         """
@@ -270,11 +338,7 @@ class InferenceEngine:
 
         generation_kwargs = {
             "prompt": prompt,
-            "max_tokens": (
-                self._max_tokens_override
-                if self._max_tokens_override is not None
-                else sampling.max_tokens
-            ),
+            "max_tokens": self.get_response_length_max_tokens(),
             "temperature": (
                 self._temperature_override
                 if self._temperature_override is not None
@@ -291,9 +355,13 @@ class InferenceEngine:
         generation_kwargs = self._filter_supported_generation_kwargs(generation_kwargs)
 
         try:
+            self._last_generation_hit_budget = False
             response_stream = self.model.create_completion(**generation_kwargs)
             for chunk in response_stream:
-                token_text = chunk["choices"][0]["text"]
+                choice = chunk["choices"][0]
+                if choice.get("finish_reason") == "length":
+                    self._last_generation_hit_budget = True
+                token_text = choice.get("text", "")
                 if token_text:
                     yield token_text
         except TypeError as e:

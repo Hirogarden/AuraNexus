@@ -251,9 +251,13 @@ def test_launcher_cpu_fast_applies_load_and_sampling_overrides(monkeypatch) -> N
     class _FakeInferenceEngine:
         def __init__(self) -> None:
             self.override_calls = []
+            self.response_length_modes = []
 
         def set_generation_overrides(self, **kwargs):
             self.override_calls.append(kwargs)
+
+        def set_response_length_mode(self, mode):
+            self.response_length_modes.append(mode)
 
     class _FakeApp:
         def __init__(self):
@@ -282,6 +286,7 @@ def test_launcher_cpu_fast_applies_load_and_sampling_overrides(monkeypatch) -> N
     assert exit_code == 0
     assert fake_app.load_calls == [{"n_gpu_layers": 0, "ctx_size": 2048}]
     assert fake_app.inference_engine.override_calls[-1] == {"max_tokens": 160}
+    assert fake_app.inference_engine.response_length_modes == ["normal"]
 
 
 def test_launcher_manual_gpu_and_context_overrides(monkeypatch) -> None:
@@ -290,7 +295,10 @@ def test_launcher_manual_gpu_and_context_overrides(monkeypatch) -> None:
             self.inference_engine = type(
                 "Engine",
                 (),
-                {"set_generation_overrides": staticmethod(lambda **kwargs: None)},
+                {
+                    "set_generation_overrides": staticmethod(lambda **kwargs: None),
+                    "set_response_length_mode": staticmethod(lambda _mode: None),
+                },
             )()
             self.load_calls = []
 
@@ -318,3 +326,43 @@ def test_launcher_manual_gpu_and_context_overrides(monkeypatch) -> None:
 
     assert exit_code == 0
     assert fake_app.load_calls == [{"n_gpu_layers": 12, "ctx_size": 8192}]
+
+
+def test_launcher_applies_response_length_override(monkeypatch) -> None:
+    class _FakeInferenceEngine:
+        def __init__(self) -> None:
+            self.response_length_modes = []
+
+        def set_response_length_mode(self, mode):
+            self.response_length_modes.append(mode)
+
+        def set_generation_overrides(self, **_kwargs):
+            return None
+
+    class _FakeApp:
+        def __init__(self):
+            self.inference_engine = _FakeInferenceEngine()
+            self.load_calls = []
+
+        def load_model(self, n_gpu_layers=None, ctx_size=None):
+            self.load_calls.append({"n_gpu_layers": n_gpu_layers, "ctx_size": ctx_size})
+
+        def generate_companion_turn(self, user_input, session_name=None, restore_latest=True):
+            return type("Result", (), {"response": f"ok:{user_input}"})()
+
+    fake_app = _FakeApp()
+    monkeypatch.setattr(launcher, "build_app", lambda args: fake_app)
+
+    exit_code = launcher.main([
+        "--model-path",
+        "model.gguf",
+        "--no-isolation",
+        "--response-length",
+        "long",
+        "companion",
+        "--message",
+        "hello",
+    ])
+
+    assert exit_code == 0
+    assert fake_app.inference_engine.response_length_modes == ["long"]
