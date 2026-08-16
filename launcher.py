@@ -34,6 +34,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Override generation max_tokens for all turns in this process.",
     )
+    parser.add_argument(
+        "--response-length",
+        choices=("short", "normal", "long"),
+        default="normal",
+        help="Select the default response-length preset.",
+    )
     parser.add_argument("--workspace-dir", default="sandbox_workspace", help="Sandbox workspace root.")
     parser.add_argument("--aura-name", default="Aura", help="Assistant display name.")
     parser.add_argument("--user-name", default="User", help="User display name.")
@@ -92,6 +98,8 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Override llama.cpp context size.")
     serve.add_argument("--max-tokens", type=int, default=None, dest="serve_max_tokens",
                        help="Override generation max_tokens.")
+    serve.add_argument("--response-length", choices=("short", "normal", "long"), default=None,
+                       dest="serve_response_length", help="Override the response-length preset.")
     serve.add_argument("--cpu-fast", action="store_true", dest="serve_cpu_fast",
                        help="CPU-optimised profile (lower ctx/tokens, no GPU offload).")
     return parser
@@ -140,6 +148,7 @@ def run_serve_command(
     effective_max_tokens = getattr(args, "serve_max_tokens", None)
     if effective_max_tokens is None:
         effective_max_tokens = args.max_tokens
+    effective_response_length = getattr(args, "serve_response_length", None) or args.response_length
     effective_cpu_fast = getattr(args, "serve_cpu_fast", False) or args.cpu_fast
 
     resolved_gpu_layers = effective_gpu_layers
@@ -174,6 +183,7 @@ def run_serve_command(
         gpu_layers=resolved_gpu_layers,
         ctx_size=resolved_ctx_size,
         max_tokens=resolved_max_tokens,
+        response_length=effective_response_length,
         cpu_fast=effective_cpu_fast,
     )
     return 0
@@ -507,6 +517,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             if args.cpu_fast and hasattr(app, "inference_engine"):
                 app.inference_engine.set_generation_overrides(max_tokens=160)
+            if hasattr(app, "inference_engine") and hasattr(app.inference_engine, "set_response_length_mode"):
+                app.inference_engine.set_response_length_mode(args.response_length)
             if args.max_tokens is not None and hasattr(app, "inference_engine"):
                 app.inference_engine.set_generation_overrides(max_tokens=args.max_tokens)
 

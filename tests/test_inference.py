@@ -34,6 +34,16 @@ class _FakeModelWithKwargs:
         yield {"choices": [{"text": "ok"}]}
 
 
+class _FakeModelBudgetStop:
+    def __init__(self) -> None:
+        self.last_call = None
+
+    def create_completion(self, **kwargs):
+        self.last_call = kwargs
+        yield {"choices": [{"text": "Partial answer"}]}
+        yield {"choices": [{"text": "", "finish_reason": "length"}]}
+
+
 def test_generate_falls_back_when_sampler_support_missing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -122,3 +132,55 @@ def test_generate_uses_runtime_overrides(
     assert fake_model.last_call is not None
     assert fake_model.last_call["max_tokens"] == 12
     assert fake_model.last_call["temperature"] == 0.2
+
+
+def test_generate_uses_response_length_presets_and_tracks_budget(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "inference_config.json"
+    model_path = tmp_path / "model.gguf"
+
+    model_path.write_text("not-a-real-model", encoding="utf-8")
+    config_path.write_text(
+        json.dumps(
+            {
+                "required_ram_buffer_mb": 2048.0,
+                "n_gpu_layers": 0,
+                "ctx_size": 1024,
+                "sampling": {
+                    "temperature": 0.7,
+                    "max_tokens": 64,
+                    "min_p": 0.05,
+                    "dry_multiplier": 0.8,
+                    "dry_base": 1.75,
+                    "dry_allowed_length": 2,
+                    "xtc_probability": 0.1,
+                    "xtc_threshold": 0.1,
+                },
+                "response_lengths": {
+                    "short": {"max_tokens": 11},
+                    "normal": {"max_tokens": 22},
+                    "long": {"max_tokens": 33},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "core.inference.psutil.virtual_memory",
+        lambda: _MemoryStats(available=8 * 1024 * 1024 * 1024),
+    )
+
+    engine = InferenceEngine(model_path=model_path, config_path=config_path)
+    fake_model = _FakeModelBudgetStop()
+    engine.model = fake_model
+    engine.set_response_length_mode("short")
+
+    chunks = list(engine.generate("hello"))
+    assert "".join(chunks) == "Partial answer"
+    assert fake_model.last_call is not None
+    assert fake_model.last_call["max_tokens"] == 11
+    assert engine.last_generation_hit_budget is True
+    assert "brief and focused" in engine.get_response_length_prompt().lower()

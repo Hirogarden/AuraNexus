@@ -8,6 +8,7 @@ from core.security import SafeSandbox
 from modes.companion import CompanionMode, CompanionTurnResult
 from modes.storyteller import StoryTurnResult, StorytellerMode
 from storage.lorebook import LorebookManager
+from storage.vector_store import LocalVectorStore
 from storage.world_state import WorldState
 from tools.executor import dispatch as _tool_dispatch, SKILL_SCHEMAS
 from tools.hf_pipelines import HFPipelineRouter
@@ -111,6 +112,21 @@ class AuraNexusApp:
                 parameters=fn_def["parameters"],
                 func=lambda sb, _a=action_name, **kw: _tool_dispatch(_a, kw),
             )
+        # ── Two-bucket HiRAG stores ───────────────────────────────────────────
+        # General: public knowledge (Wikipedia, docs, reference) — both modes.
+        # Personal: user-specific content — companion mode only.
+        self.hirag_general = LocalVectorStore(
+            storage_path="memory/hirag_general.json",
+            sandbox=self.sandbox,
+            max_cluster_size=24,
+            max_cluster_depth=6,
+        )
+        self.hirag_personal = LocalVectorStore(
+            storage_path="memory/hirag_personal.json",
+            sandbox=self.sandbox,
+            max_cluster_size=24,
+            max_cluster_depth=6,
+        )
         self.runtime = AuraRuntime(
             inference_engine=self.inference_engine,
             lorebook=self.lorebook,
@@ -121,6 +137,8 @@ class AuraNexusApp:
             chat_session_dir=self.sandbox.sanitize_path("sessions/companion"),
             story_session_dir=self.sandbox.sanitize_path("sessions/story"),
             emotional_memory_dir=self.sandbox.sanitize_path("memory/emotional"),
+            hirag_general=self.hirag_general,
+            hirag_personal=self.hirag_personal,
         )
         self._apply_bootstrap_seed(aura_name=aura_name, user_name=user_name)
         self.companion_mode = CompanionMode(self.runtime)
@@ -165,6 +183,8 @@ class AuraNexusApp:
             "chat_session_dir": str(self.runtime.chat_session_dir) if self.runtime.chat_session_dir is not None else None,
             "story_session_dir": str(self.runtime.story_session_dir) if self.runtime.story_session_dir is not None else None,
             "skills_dir": str(self.openclaw_bridge.registry_dir),
+            "hirag_general_path": str(self.hirag_general.storage_path),
+            "hirag_personal_path": str(self.hirag_personal.storage_path),
             "bootstrap_seed": self._bootstrap_seed_payload(aura_name=aura_name, user_name=user_name),
         }
         self.bootstrap_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -179,6 +199,8 @@ class AuraNexusApp:
         self.lorebook.save()
         self.runtime.save_active_chat_session()
         self.runtime.save_active_story()
+        self.hirag_general.save_index()
+        self.hirag_personal.save_index()
         self._write_bootstrap_manifest(aura_name=self.runtime.aura_name, user_name=self.runtime.user_name)
 
     def ensure_demo_skill(self) -> dict[str, Any]:

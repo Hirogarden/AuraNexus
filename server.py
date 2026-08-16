@@ -14,11 +14,8 @@ Or directly:
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
-import math
 import os
-import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
@@ -34,8 +31,16 @@ import uvicorn
 
 from core.app import AuraNexusApp
 from core.context_filter import ContextFilter, MemoryMode
+from core.guardrails import (
+    build_stop_sequences as guardrail_stop_sequences,
+    contains_sensitive_text,
+    finish_budget_limited_reply,
+    find_role_transition,
+    redact_sensitive_text,
+    sanitize_single_reply,
+)
+from storage.embedder import embed_text
 from storage.lorebook import StoryCard
-from storage.vector_store import LocalVectorStore
 
 # ── Runtime configuration (overridden by start_server() before lifespan runs) ─
 _MODEL_PATH: Optional[str] = os.environ.get("AURANEXUS_MODEL_PATH")
@@ -45,10 +50,10 @@ _USER_NAME: str = os.environ.get("AURANEXUS_USER_NAME", "Hiro")
 _GPU_LAYERS: Optional[int] = None
 _CTX_SIZE: Optional[int] = None
 _MAX_TOKENS: Optional[int] = None
+_RESPONSE_LENGTH: str = "normal"
 
 # ── Global state ───────────────────────────────────────────────────────────────
 _app: Optional[AuraNexusApp] = None
-_vector_store: Optional[LocalVectorStore] = None
 _model_loaded: bool = False
 _inference_lock: Optional[asyncio.Lock] = None
 _executor = ThreadPoolExecutor(max_workers=2)
@@ -63,53 +68,14 @@ def _require_app() -> AuraNexusApp:
     return _app
 
 
-def _require_store() -> LocalVectorStore:
-    if _vector_store is None:
-        raise HTTPException(status_code=503, detail="Vector store not initialized.")
-    return _vector_store
-
-
-# ── Deterministic text embedding (128-dim bag-of-char-ngrams) ─────────────────
-
-def _embed_text(text: str, dim: int = 128) -> List[float]:
-    """
-    Converts text to a normalized 128-dimensional vector using character
-    n-gram frequency hashing.  No external model required; produces
-    consistent vectors for similar text, allowing HiRAG clustering.
-    """
-    text = re.sub(r"\s+", " ", text.lower().strip())
-    if not text:
-        return [0.0] * dim
-
-    freq: List[float] = [0.0] * dim
-    tokens = re.split(r"\W+", text)
-
-    for token in tokens:
-        if not token:
-            continue
-        # Unigram contributes 1.0
-        bucket = int(hashlib.md5(token.encode("utf-8")).hexdigest(), 16) % dim
-        freq[bucket] += 1.0
-        # Character bigrams contribute 0.5
-        for i in range(len(token) - 1):
-            bigram = token[i : i + 2]
-            bucket = int(hashlib.md5(bigram.encode("utf-8")).hexdigest(), 16) % dim
-            freq[bucket] += 0.5
-        # Character trigrams contribute 0.25
-        for i in range(len(token) - 2):
-            trigram = token[i : i + 3]
-            bucket = int(hashlib.md5(trigram.encode("utf-8")).hexdigest(), 16) % dim
-            freq[bucket] += 0.25
-
-    norm = math.sqrt(sum(v * v for v in freq))
-    if norm == 0.0:
-        return [0.0] * dim
-    return [v / norm for v in freq]
-
-
 # ── Stop-sequence streaming ───────────────────────────────────────────────────
 
-def _stopping_wrap(gen: Iterator[str], stop_sequences: List[str]) -> Iterator[str]:
+def _stopping_wrap(
+    gen: Iterator[str],
+    stop_sequences: List[str],
+    *,
+    role_boundary_detector: Any | None = None,
+) -> Iterator[str]:
     """
     Wraps a token generator and halts emission when any stop sequence appears
     in the accumulated output, discarding everything from the stop point onward.
@@ -117,55 +83,43 @@ def _stopping_wrap(gen: Iterator[str], stop_sequences: List[str]) -> Iterator[st
     Handles stop sequences that straddle token boundaries by maintaining a
     rolling tail buffer for lookback.
     """
-    if not stop_sequences:
+    if not stop_sequences and role_boundary_detector is None:
         yield from gen
         return
 
-    acc = ""
-    CHECK_TAIL = 160  # chars to scan at the end of the running buffer
+    pending = ""
+    lookback = max(max((len(seq) for seq in stop_sequences), default=0), 96)
 
     for token in gen:
-        acc += token
-        tail_start = max(0, len(acc) - CHECK_TAIL)
-        tail = acc[tail_start:]
+        pending += token
 
-        cut = -1
+        cut: int | None = None
         for seq in stop_sequences:
-            pos = tail.find(seq)
-            if pos >= 0:
-                cut = tail_start + pos
-                break
+            pos = pending.find(seq)
+            if pos >= 0 and (cut is None or pos < cut):
+                cut = pos
 
-        if cut >= 0:
-            # Emit only the clean prefix of this token, if any.
-            already_emitted = len(acc) - len(token)
-            good_end = cut - already_emitted
-            if good_end > 0:
-                yield token[:good_end]
+        if callable(role_boundary_detector):
+            boundary = role_boundary_detector(pending)
+            if boundary is not None and (cut is None or boundary < cut):
+                cut = boundary
+
+        if cut is not None:
+            if cut > 0:
+                yield pending[:cut]
             return
 
-        yield token
+        safe_length = len(pending) - lookback
+        if safe_length > 0:
+            yield pending[:safe_length]
+            pending = pending[safe_length:]
+
+    if pending:
+        yield pending
 
 
 def _build_stop_sequences(user_name: str, aura_name: str) -> List[str]:
-    """
-    Returns a list of stop sequences that indicate the model has started
-    simulating the conversation continuing beyond its single reply.
-    """
-    stops = [
-        f"\n{user_name}:",
-        f"\n{aura_name}: ",   # model pretending to give a second reply
-        "\nUser:",
-        "\nHuman:",
-        "\nUSER:",
-        "\n[Hidden Inner-Self Reflection",
-        "\n[Hidden reflection",
-        "\n[INST]",
-        "\n### Human:",
-        "\n<|user|>",
-        "\n<human>:",
-    ]
-    return list(dict.fromkeys(stops))  # deduplicate while preserving order
+    return guardrail_stop_sequences(user_name, aura_name)
 
 
 # ── Streaming helper ───────────────────────────────────────────────────────────
@@ -233,7 +187,7 @@ async def _stream_tokens(ws: WebSocket, token_gen: Iterator[str]) -> str:
 
 @asynccontextmanager
 async def _lifespan(fastapi_app: FastAPI):  # noqa: ARG001
-    global _app, _vector_store, _model_loaded, _inference_lock
+    global _app, _model_loaded, _inference_lock
 
     _inference_lock = asyncio.Lock()
 
@@ -245,13 +199,7 @@ async def _lifespan(fastapi_app: FastAPI):  # noqa: ARG001
         allowed_commands={"python3"},
         require_isolation=False,
     )
-
-    _vector_store = LocalVectorStore(
-        storage_path="memory/hirag_index.json",
-        sandbox=_app.sandbox,
-        max_cluster_size=16,
-        max_cluster_depth=6,
-    )
+    _app.inference_engine.set_response_length_mode(_RESPONSE_LENGTH)
 
     if _MODEL_PATH and Path(_MODEL_PATH).exists():
         try:
@@ -278,11 +226,9 @@ async def _lifespan(fastapi_app: FastAPI):  # noqa: ARG001
     print(f"[AuraNexus] Server ready. Open http://127.0.0.1:7860 in your browser.")
     yield
 
-    # Graceful shutdown
+    # Graceful shutdown — save_state() persists both HiRAG stores internally.
     if _app:
         _app.save_state()
-    if _vector_store:
-        _vector_store.save_index()
     _executor.shutdown(wait=False)
 
 
@@ -305,14 +251,26 @@ async def root():
     return FileResponse(str(index))
 
 
+@web.get("/story", response_class=FileResponse)
+async def story_root():
+    """Serves the dedicated Story Engine window."""
+    story_page = _STATIC_DIR / "story.html"
+    if not story_page.exists():
+        return HTMLResponse(
+            "<h1>AuraNexus Story Engine</h1>"
+            "<p>Story frontend not found — expected <code>static/story.html</code> next to server.py.</p>"
+        )
+    return FileResponse(str(story_page))
+
+
 # ── Status ─────────────────────────────────────────────────────────────────────
 
 @web.get("/api/status")
 async def api_status():
     app = _require_app()
     manifest = app.get_bootstrap_manifest()
-    store = _require_store()
-    mem = store.get_hirag_state()
+    g = app.hirag_general.get_hirag_state()
+    p = app.hirag_personal.get_hirag_state()
     return {
         "status": "ok",
         "model_loaded": _model_loaded,
@@ -321,8 +279,8 @@ async def api_status():
         "user_name": _USER_NAME,
         "app_version": manifest.get("app_version"),
         "memory": {
-            "local_count": mem["local_count"],
-            "global_count": mem["global_count"],
+            "general": {"local_count": g["local_count"], "global_count": g["global_count"]},
+            "personal": {"local_count": p["local_count"], "global_count": p["global_count"]},
         },
     }
 
@@ -556,9 +514,13 @@ async def delete_lore_card(card_id: str):
 
 # ── HiRAG memory ───────────────────────────────────────────────────────────────
 
+_VALID_BUCKETS = {"general", "personal"}
+
+
 class AddMemoryRequest(BaseModel):
     text: str = Field(min_length=1, max_length=8000)
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    bucket: str = Field(default="general")
 
 
 class SearchMemoryRequest(BaseModel):
@@ -566,22 +528,35 @@ class SearchMemoryRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)
     top_clusters: int = Field(default=2, ge=1, le=10)
     mode: str = Field(default="companion", pattern="^(companion|storyteller|shared)$")
+    bucket: str = Field(default="general")
 
 
 @web.get("/api/memory")
 async def get_memory_state():
-    return _require_store().get_hirag_state()
+    """Returns HiRAG state for both buckets."""
+    app = _require_app()
+    return {
+        "general": app.hirag_general.get_hirag_state(),
+        "personal": app.hirag_personal.get_hirag_state(),
+    }
 
 
 @web.post("/api/memory/add", status_code=201)
 async def add_memory(req: AddMemoryRequest):
-    store = _require_store()
-    vector = _embed_text(req.text)
-    store.add_vector(vector=vector, text=req.text, metadata=req.metadata)
+    app = _require_app()
+    if req.bucket not in _VALID_BUCKETS:
+        raise HTTPException(status_code=422, detail=f"bucket must be 'general' or 'personal'.")
+    store = app.hirag_personal if req.bucket == "personal" else app.hirag_general
+    redacted_text = redact_sensitive_text(req.text)
+    vector = embed_text(redacted_text)
+    metadata = dict(req.metadata)
+    metadata["sensitive"] = bool(metadata.get("sensitive")) or contains_sensitive_text(redacted_text)
+    store.add_vector(vector=vector, text=redacted_text, metadata=metadata)
     store.save_index()
     state = store.get_hirag_state()
     return {
         "status": "added",
+        "bucket": req.bucket,
         "local_count": state["local_count"],
         "global_count": state["global_count"],
     }
@@ -589,8 +564,11 @@ async def add_memory(req: AddMemoryRequest):
 
 @web.post("/api/memory/search")
 async def search_memory(req: SearchMemoryRequest):
-    store = _require_store()
-    query_vector = _embed_text(req.query)
+    app = _require_app()
+    if req.bucket not in _VALID_BUCKETS:
+        raise HTTPException(status_code=422, detail=f"bucket must be 'general' or 'personal'.")
+    store = app.hirag_personal if req.bucket == "personal" else app.hirag_general
+    query_vector = embed_text(req.query)
     results = store.query_hierarchical(
         query_vector=query_vector,
         top_k=req.top_k,
@@ -602,17 +580,19 @@ async def search_memory(req: SearchMemoryRequest):
     results = cf.filter_search_results(results)
     return [
         {
-            "text": text,
+            "text": redact_sensitive_text(text),
             "score": round(score, 4),
+            "bucket": req.bucket,
             "cluster_id": meta.get("hirag_cluster_id"),
             "local_id": meta.get("hirag_local_id"),
             "metadata": {
                 k: v
                 for k, v in meta.items()
                 if k not in ("hirag_cluster_id", "hirag_local_id")
-            },
+            } if not bool(meta.get("sensitive")) else {"sensitive": True},
         }
         for text, meta, score in results
+        if not bool(meta.get("sensitive")) and not contains_sensitive_text(text)
     ]
 
 # ── WorldState facts ───────────────────────────────────────────────────────────
@@ -711,11 +691,17 @@ async def ws_companion(ws: WebSocket):
                 reflection_prompt = app.companion_mode._build_reflection_prompt(
                     context, user_text
                 )
+                response_detector = lambda text: find_role_transition(
+                    text,
+                    user_name=app.runtime.user_name,
+                    assistant_name=app.runtime.aura_name,
+                )
                 hidden_reflection = await _stream_tokens(
                     ws,
                     _stopping_wrap(
                         app.runtime.inference_engine.generate(reflection_prompt),
                         stop_seqs,
+                        role_boundary_detector=response_detector,
                     ),
                 )
 
@@ -729,6 +715,7 @@ async def ws_companion(ws: WebSocket):
                     _stopping_wrap(
                         app.runtime.inference_engine.generate(final_prompt),
                         stop_seqs,
+                        role_boundary_detector=response_detector,
                     ),
                 )
 
@@ -816,6 +803,21 @@ async def ws_story(ws: WebSocket):
                 if app.runtime.active_story is not None:
                     player_name = app.runtime.active_story.player_name
                     stop_seqs.append(f"\n{player_name}:")
+                    response_detector = lambda text: find_role_transition(
+                        text,
+                        user_name=app.runtime.user_name,
+                        assistant_name=app.runtime.aura_name,
+                        extra_turn_speakers=(
+                            app.runtime.active_story.player_name,
+                            app.runtime.active_story.narrator_name,
+                        ),
+                    )
+                else:
+                    response_detector = lambda text: find_role_transition(
+                        text,
+                        user_name=app.runtime.user_name,
+                        assistant_name=app.runtime.aura_name,
+                    )
 
                 await ws.send_json({"type": "start", "phase": "narration"})
                 context = app.runtime.build_prompt(user_text)
@@ -824,8 +826,21 @@ async def ws_story(ws: WebSocket):
                     _stopping_wrap(
                         app.runtime.inference_engine.generate(context.prompt),
                         stop_seqs,
+                        role_boundary_detector=response_detector,
                     ),
                 )
+
+            response = sanitize_single_reply(
+                response,
+                user_name=app.runtime.user_name,
+                assistant_name=app.runtime.aura_name,
+                extra_turn_speakers=(
+                    app.runtime.active_story.player_name,
+                    app.runtime.active_story.narrator_name,
+                ) if app.runtime.active_story is not None else None,
+            )
+            if getattr(app.runtime.inference_engine, "last_generation_hit_budget", False):
+                response = finish_budget_limited_reply(response)
 
             if response.strip():
                 app.runtime.post_turn(user_text, response)
@@ -855,16 +870,18 @@ def start_server(
     gpu_layers: Optional[int] = None,
     ctx_size: Optional[int] = None,
     max_tokens: Optional[int] = None,
+    response_length: str = "normal",
     cpu_fast: bool = False,
 ) -> None:
     """Configure and launch the uvicorn server."""
     global _MODEL_PATH, _WORKSPACE_DIR, _AURA_NAME, _USER_NAME
-    global _GPU_LAYERS, _CTX_SIZE, _MAX_TOKENS
+    global _GPU_LAYERS, _CTX_SIZE, _MAX_TOKENS, _RESPONSE_LENGTH
 
     _MODEL_PATH = model
     _WORKSPACE_DIR = workspace
     _AURA_NAME = aura_name
     _USER_NAME = user_name
+    _RESPONSE_LENGTH = response_length
 
     if cpu_fast:
         _GPU_LAYERS = gpu_layers if gpu_layers is not None else 0
@@ -896,6 +913,7 @@ if __name__ == "__main__":
     p.add_argument("--gpu-layers", type=int, default=None)
     p.add_argument("--ctx-size", type=int, default=None)
     p.add_argument("--max-tokens", type=int, default=None)
+    p.add_argument("--response-length", choices=("short", "normal", "long"), default="normal")
     a = p.parse_args()
 
     start_server(
@@ -908,5 +926,6 @@ if __name__ == "__main__":
         gpu_layers=a.gpu_layers,
         ctx_size=a.ctx_size,
         max_tokens=a.max_tokens,
+        response_length=a.response_length,
         cpu_fast=a.cpu_fast,
     )

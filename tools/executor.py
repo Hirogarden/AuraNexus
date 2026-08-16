@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
+from core.guardrails import is_sensitive_path, redact_sensitive_text
 
 # ── Path safety ────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,8 @@ def _safe_path(raw: str) -> Path | None:
     home = Path.home().resolve()
     tmp = Path("/tmp").resolve()
     if str(p).startswith(str(home)) or str(p).startswith(str(tmp)):
+        if is_sensitive_path(p):
+            return None
         return p
     return None
 
@@ -63,7 +66,7 @@ def exec_web_search(query: str) -> Dict[str, Any]:
         output = f"Search results for: {query}\n\n" + "\n\n".join(
             f"{i + 1}. {s}" for i, s in enumerate(clean)
         )
-        return {"ok": True, "output": output}
+        return {"ok": True, "output": redact_sensitive_text(output)}
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "output": f"Search failed: {exc}"}
 
@@ -86,7 +89,7 @@ def exec_read_file(path: str) -> Dict[str, Any]:
         truncated = len(content) > MAX
         if truncated:
             content = content[:MAX] + f"\n\n[… truncated at {MAX} chars]"
-        return {"ok": True, "output": f"Contents of {p}:\n\n{content}"}
+        return {"ok": True, "output": f"Contents of {p}:\n\n{redact_sensitive_text(content)}"}
     except OSError as exc:
         return {"ok": False, "output": f"Could not read file: {exc}"}
 
@@ -107,6 +110,8 @@ def exec_list_directory(path: str) -> Dict[str, Any]:
         entries = sorted(p.iterdir(), key=lambda e: (e.is_file(), e.name.lower()))
         lines = []
         for e in entries[:100]:
+            if is_sensitive_path(e):
+                continue
             tag = "/" if e.is_dir() else ""
             lines.append(f"  {e.name}{tag}")
         if len(list(p.iterdir())) > 100:
@@ -145,6 +150,7 @@ def exec_run_python(code: str) -> Dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=10,
+            env={"PATH": os.environ.get("PATH", "/usr/bin:/bin")},
         )
         output = ""
         if result.stdout:
@@ -153,7 +159,7 @@ def exec_run_python(code: str) -> Dict[str, Any]:
             output += ("\n[stderr]\n" if result.stdout else "[stderr]\n") + result.stderr
         if not output:
             output = "(no output)"
-        return {"ok": result.returncode == 0, "output": output.strip()}
+        return {"ok": result.returncode == 0, "output": redact_sensitive_text(output.strip())}
     except subprocess.TimeoutExpired:
         return {"ok": False, "output": "Script timed out (10s limit)."}
     except Exception as exc:  # noqa: BLE001
