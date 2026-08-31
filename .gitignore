@@ -1,0 +1,17 @@
+# Python caches and bytecode
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local environment
+.venv/
+
+# Editor/system noise
+.vscode/
+
+# Local/private architecture and planning notes
+AUDIT_MANIFEST.md
+MASTER_BUILD_PLAN.md
+BUILD_DETAILS_LOCAL.txt
+Blueprint.md
+.project_rules/
